@@ -5,7 +5,7 @@ import rtde.rtde_config as rtde_config
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-from min_jerk_test2 import PathPlanTranslation  # Ensure this module is available
+from trajectory_planner_line import PathPlanTranslation  # Ensure this module is available
 
 def setp_to_list(setp, offset=0):
     return [setp.__dict__[f"input_double_register_{i + offset}"] for i in range(6)]

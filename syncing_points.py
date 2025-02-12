@@ -5,7 +5,7 @@ import rtde.rtde_config as rtde_config
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-from min_jerk_test2 import PathPlanTranslation  # Ensure this module is available
+from trajectory_planner_line import PathPlanTranslation  # Ensure this module is available
 from rotation_matrix import T, transform_point
 from bfgs_minimise import alpha_star, alpha_star_deg
 from constants import d, h, theta_l
