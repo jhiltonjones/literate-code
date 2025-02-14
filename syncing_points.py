@@ -5,7 +5,7 @@ import rtde.rtde_config as rtde_config
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-from trajectory_planner_line import PathPlanTranslation  # Ensure this module is available
+from trajectory_planner_line import PathPlanTranslation  
 from rotation_matrix import T, transform_point
 from bfgs_minimise import alpha_star, alpha_star_deg
 from constants import d, h, theta_l
@@ -22,7 +22,7 @@ def list_to_setp(setp, lst, offset=0):
 # ------------- Robot Communication Setup -----------------
 ROBOT_HOST = '192.168.56.101'
 ROBOT_PORT = 30004
-config_filename = 'control_loop_configuration.xml'  # specify XML file for data synchronization
+config_filename = 'control_loop_configuration.xml'  
 
 logging.getLogger().setLevel(logging.INFO)
 
@@ -42,24 +42,21 @@ print("---------------Successfully connected to the robot-------------\n")
 
 con.get_controller_version()
 
-# Setup Data Synchronization
 FREQUENCY = 500  
 con.send_output_setup(state_names, state_types, FREQUENCY)
 setp = con.send_input_setup(setp_names, setp_types)
 watchdog = con.send_input_setup(watchdog_names, watchdog_types)
 
-for i in range(12):  # Ensure all registers are initialized
+for i in range(12):  
     setattr(setp, f"input_double_register_{i}", 0)
 
 
 setp.input_bit_registers0_to_31 = 0
 watchdog.input_int_register_0 = 0
 
-# Start Data Synchronization
 if not con.send_start():
     sys.exit()
 
-# This takes in d,h from the constants file and then inputs this into the rotation matrix to give the waypoints
 transformed_points = transform_point(T, d, h)
 x_robotic_arm = transformed_points[0]
 y_robotic_arm = transformed_points[1]
@@ -82,14 +79,14 @@ waypoints = [
 ]
 #This is working code
 orientation_const = waypoints[0][3:]
-trajectory_time_total = 3 # Total time for full motion
-trajectory_time_per_segment = trajectory_time_total / (len(waypoints) - 1)  # Split time per segment
+trajectory_time_total = 3 
+trajectory_time_per_segment = trajectory_time_total / (len(waypoints) - 1)  
 state = con.receive()
 tcp1 = state.actual_TCP_pose
 print(tcp1)
 start_point_list = setp_to_list(setp, offset=6)
-waypoints_list = setp_to_list(setp, offset=0)  # Read waypoints (0-5)
-position_list = setp_to_list(setp, offset=6)  # Read position (6-11)
+waypoints_list = setp_to_list(setp, offset=0)  
+position_list = setp_to_list(setp, offset=6) 
 
 # Wait for User to Continue on Polyscope
 while True:
@@ -104,7 +101,7 @@ print("-------Executing moveJ start -----------\n")
 # Send Initial Pose
 watchdog.input_int_register_0 = 1
 con.send(watchdog)
-list_to_setp(setp, waypoints[0], offset=0)  # Waypoints in registers 0-5
+list_to_setp(setp, waypoints[0], offset=0) 
 con.send(setp) 
 
 while True:
@@ -116,10 +113,9 @@ while True:
         break
 print("-------Executing moveJ -----------\n")
 
-# Send Initial Pose
 watchdog.input_int_register_0 = 1
 con.send(watchdog)
-list_to_setp(setp, waypoints[0], offset=0)  # Waypoints in registers 0-5
+list_to_setp(setp, waypoints[0], offset=0)  
 con.send(setp) 
 
 while True:
@@ -134,7 +130,7 @@ while True:
 print("-------Executing servoJ  -----------\n")
 watchdog.input_int_register_0 = 2
 con.send(watchdog)
-trajectory_time = 8  # time of min_jerk trajectory
+trajectory_time = 8  
 dt = 1/500  # 500 Hz    # frequency
 plotter = True
 if plotter:
@@ -157,7 +153,7 @@ if plotter:
     vz = []
 
 
-# Multi-Waypoint Execution with Smooth Motion
+
 current_waypoint_index = 0
 t_start = time.time()
 
@@ -166,10 +162,10 @@ while current_waypoint_index < len(waypoints) - 1:
     start_point = waypoints[current_waypoint_index]
     end_point = waypoints[current_waypoint_index + 1]
 
-    planner = PathPlanTranslation(start_point, end_point, trajectory_time_per_segment)  # Adjust arc height
+    planner = PathPlanTranslation(start_point, end_point, trajectory_time_per_segment) 
 
     while time.time() - t_segment_start < trajectory_time_per_segment:
-        t_current = time.time() - t_segment_start  # Time elapsed in the segment
+        t_current = time.time() - t_segment_start  
         state = con.receive()
 
         if state.runtime_state > 1:
@@ -182,7 +178,6 @@ while current_waypoint_index < len(waypoints) - 1:
 
 
 
-            # Plot data for debugging
             if plotter:
                 time_plot.append(time.time() - t_start)
 
@@ -202,40 +197,32 @@ while current_waypoint_index < len(waypoints) - 1:
                 vy.append(current_speed[1])
                 vz.append(current_speed[2])
 
-    current_waypoint_index += 1  # Move to the next waypoint
+    current_waypoint_index += 1 
 
 print(f"It took {time.time()-t_start}s to execute the servoJ")
 
 state = con.receive()
-time.sleep(0.5)  # Ensure the robot has time to receive and process the movement
+time.sleep(0.5)  
 
 print("-------Executing moveJ -----------\n")
 
 watchdog.input_int_register_0 = 3
-# Read the actual joint positions before modification
 actual_position = state.actual_q
 print("Actual joint position before moveJ:", actual_position)
 
-# Compute rotation and modify wrist joint 3 (joint index 5)
 print("Rotation angle in radians added: ", alpha_star_deg)
-rotation_angle_radians = alpha_star  # Example: adding 100 degrees
-position = actual_position[:]  # Copy current joint states
-position = [float(joint) for joint in actual_position]  # Convert to float
-position[5] += rotation_angle_radians  # Apply rotation
+rotation_angle_radians = alpha_star  
+position = actual_position[:]  
+position = [float(joint) for joint in actual_position] 
+position[5] += rotation_angle_radians  
 
 print(f"Sent joint positions: {position}")
 list_to_setp(setp, position, offset=6)
 con.send(setp)
-time.sleep(0.5)  # Allow time for movement
-
-# Print what will be sent
-
-
-# Send Initial Pose
+time.sleep(0.5)  
 
 con.send(watchdog)
-# list_to_setp(setp, position, offset=6)  # Store position in registers 6-11
-# con.send(setp)
+
 
 while True:
     print('Waiting for moveJ() second to finish...')
@@ -245,7 +232,6 @@ while True:
         print('MoveJ completed, proceeding to next mode\n')
         break
 
-# Print actual joint positions after execution
 state = con.receive()
 print('--------------------')
 print("Actual joint position after moveJ:", state.actual_q)
@@ -260,7 +246,6 @@ con.send(watchdog)
 con.send_pause()
 con.disconnect()
 
-# Plot Results
 if plotter:
     # ----------- Position Plots -------------
     fig, axs = plt.subplots(3, 1, figsize=(10, 12))

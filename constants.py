@@ -29,19 +29,24 @@ d, h = 0.086, -0.025
 # d, h = 0.086, 0.025
 y_basis = np.array([0,1,0])
 x_basis = np.array([1,0,0])
-
+t_basis = np.array([1,1,0])
 def degrees_to_radians(degrees):
     result = degrees * (np.pi/180)
     return result
 def radians_to_degrees(radians):
     degrees = radians/(np.pi/180)
     return degrees
-
+def theta_plan(x_basis, t_basis):
+    term1 = x_basis @ t_basis
+    term2 = np.linalg.norm(x_basis)*np.linalg.norm(t_basis)
+    result = np.arccos(term1 / term2)
+    return result
 if __name__ == "__main__":
-
-    answer_deg = radians_to_degrees(0.2)
+    theta = theta_plan(x_basis, t_basis)
+    print("Theta is: ", theta)
+    answer_deg = radians_to_degrees(theta)
     print("Answer in degrees is: ", answer_deg)
-    answer_rad = degrees_to_radians(-53.91)
-    print("In radians this is: ", answer_rad)
+    # answer_rad = degrees_to_radians(-53.91)
+    # print("In radians this is: ", answer_rad)
 
 

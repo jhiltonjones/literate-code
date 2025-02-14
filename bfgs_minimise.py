@@ -9,58 +9,48 @@ import numpy as np
 
 def compute_angle(EI, theta_l, length_c, x_p, y_p, x_basis, y_basis, p_norm1, 
                   max_iterations=100, tolerance=1e-10):
-    alpha_star_alternate = np.radians(5)  # Initial guess
+    alpha_star_alternate = np.radians(5)  
 
     for i in range(max_iterations):
         print(f"\n🔵 **Iteration {i+1}** 🔵")
         
-        # Compute catheter and magnet unit vectors
         vector_cath, vector_mag = moment_cath1(x_basis, y_basis, alpha_star_alternate, theta_l)
         print(f"Vector Catheter: {vector_cath}")
         print(f"Vector Magnet: {vector_mag}")
 
-        # Compute magnetic moments
         moment_cath, _ = magnetic_moment(mu_0, B_rc, volume_cath, vector_cath)
         moment_mag, _ = magnetic_moment(mu_0, B_ra, volume_mag, vector_mag)
         print(f"Magnetic Moment Catheter: {moment_cath}")
         print(f"Magnetic Moment Magnet: {moment_mag}")
 
-        # Compute norm of magnetic moments
         moment_mag_unit_norm = np.linalg.norm(moment_mag)
         moment_cath_unit_norm = np.linalg.norm(moment_cath)
         print(f"Norm Magnetic Moment Magnet: {moment_mag_unit_norm}")
         print(f"Norm Magnetic Moment Catheter: {moment_cath_unit_norm}")
 
-        # Compute n0 (magnetic interaction scaling factor)
         n0 = (mu_0 * moment_mag_unit_norm * moment_cath_unit_norm) / (4 * np.pi * p_norm1**3)
         print(f"n0: {n0}")
 
-        # Compute force components
         n1, n2, n3, n4 = components(x_p, y_p)
         print(f"n1: {n1}, n2: {n2}, n3: {n3}, n4: {n4}")
 
         f_1, f_2 = force_12(n0, n1, n2, n3, n4, theta_l)
         print(f"Computed Forces → f1: {f_1}, f2: {f_2}")
 
-        # Compute bending moments
         T_e, T_e2 = bending_moment_equation(EI, theta_l, length_c, f_1, f_2, alpha_star_alternate)
         print(f"EI * theta_l / l: {T_e}")
         print(f"Bending from forces: {T_e2}")
         print(f"Difference: {T_e - T_e2}")
 
-        # Compute new alpha_star_alternate
         new_alpha_star_alternate = function_alpha_o(EI, theta_l, f_1, f_2, length_c)
         print(f"Function Alpha_o* Term1: {new_alpha_star_alternate}")
 
-        # Print debug information for angle update
         print(f"Iteration {i+1}: α_o = {np.degrees(alpha_star_alternate):.6f}° → New α_o = {np.degrees(new_alpha_star_alternate):.6f}°")
 
-        # Check for convergence
         if np.abs(new_alpha_star_alternate - alpha_star_alternate) < tolerance:
             print(f"✅ Converged in {i+1} iterations.")
             break
 
-        # Update α_o for next iteration
         alpha_star_alternate = new_alpha_star_alternate
 
     return alpha_star_alternate
@@ -118,14 +108,14 @@ def objective_function(alpha_o, EI, theta_l, length_c, x_p, y_p, x_basis, y_basi
     return np.linalg.norm(residual)
 
 def find_optimal_alpha_o(EI, theta_l, length_c, x_p, y_p, x_distance, y_distance, p_norm1):
-    initial_guesses = [np.radians(5), np.radians(90), np.radians(150)]  # Try different angles
+    initial_guesses = [np.radians(5), np.radians(90), np.radians(150)]  
     best_result = None
     best_residual = np.inf
 
     for guess in initial_guesses:
         result = minimize(objective_function, guess, args=(EI, theta_l, length_c, x_p, y_p, x_distance, y_distance, p_norm1), method='BFGS')
         
-        if result.fun < best_residual:  # Keep the best solution
+        if result.fun < best_residual:  
             best_residual = result.fun
             best_result = result
 

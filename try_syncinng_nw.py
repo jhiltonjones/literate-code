@@ -8,7 +8,8 @@ import matplotlib.pyplot as plt
 from trajectory_planner_line import PathPlanTranslation  # Ensure this module is available
 from rotation_matrix import T, transform_point
 from bfgs_minimise import alpha_star, alpha_star_deg
-from constants import d, h
+from constants import d, h, theta_l
+from PID_control import PIDController
 def setp_to_list(setp, offset=0):
     return [setp.__dict__[f"input_double_register_{i + offset}"] for i in range(6)]
 
@@ -64,11 +65,11 @@ transformed_points = transform_point(T, d, h)
 x_robotic_arm = transformed_points[0]
 y_robotic_arm = transformed_points[1]
 
-start_point = [-0.7997019926654261, -1.3955088269761582, 1.7951162497149866, 1.0444416242786865, 1.5849697589874268, -2.961236063634054]
+start_point = [-0.31563740358348213, 0.451164987228323, 0.38704760524680776, -2.195089565641003, 2.2236842260238285, -0.012538948420594043]
 # Define Waypoints for Continuous Trajectory
 waypoints = [
-    [-0.3156201917835993, 0.4452004411528787, 0.3870100889881868, -2.1950753824332496, 2.2236917890585493, -0.012607305520799127],
-    [x_robotic_arm, y_robotic_arm, 0.3870643751382633, -3.1129835149573597, -0.39044182826995194, -0.02877771799883438],
+    [-0.3156422082847773, 0.4511485435638499, 0.1869893060870562, -0.881634584042421, 2.9958190256705133, 0.0013891383636546828],
+    [x_robotic_arm, y_robotic_arm, 0.1870643751382633, -3.1129835149573597, -0.39044182826995194, -0.02877771799883438],
     # [0.11561346376380156, 0.4392848297605487, 0.3870643751382633, -3.1129835149573597, -0.39044182826995194, -0.02877771799883438], # Start
     # [0.01561346376380156, 0.8392848297605487, 0.3870643751382633, -3.1129835149573597, -0.39044182826995194, -0.02877771799883438],
     # [-0.31561346376380156, 0.8392848297605487, 0.3870643751382633, -3.1129835149573597, -0.39044182826995194, -0.02877771799883438],
@@ -80,6 +81,7 @@ waypoints = [
     # [-0.31561346376380156, 0.8392848297605487, 0.3870643751382633, -3.1129835149573597, -0.39044182826995194, -0.02877771799883438],
     # [0.01561346376380156, 0.8392848297605487, 0.3870643751382633, -3.1129835149573597, -0.39044182826995194, -0.02877771799883438] 
 ]
+#This is working code
 orientation_const = waypoints[0][3:]
 trajectory_time_total = 3 # Total time for full motion
 trajectory_time_per_segment = trajectory_time_total / (len(waypoints) - 1)  # Split time per segment
@@ -102,39 +104,36 @@ print("-------Executing moveJ start -----------\n")
 
 # Send Initial Pose
 watchdog.input_int_register_0 = 1
-time.sleep(0.5)  # Allow time for movement
-
-con.send(watchdog)
-
-list_to_setp(setp, start_point, offset=6)
-con.send(setp)
-while True:
-    # print('Waiting for moveJ() second to finish...')
-    state = con.receive()
-    con.send(watchdog)
-    if not state.output_bit_registers0_to_31:
-        print('MoveJ completed, proceeding to next mode\n')
-        break
-print("-------Executing moveJ -----------\n")
-
-# Send Initial Pose
-time.sleep(0.5)
-watchdog.input_int_register_0 = 2
 con.send(watchdog)
 list_to_setp(setp, waypoints[0], offset=0)  # Waypoints in registers 0-5
 con.send(setp) 
 
 while True:
-    # print('Waiting for moveJ() first to finish')
+    print('Waiting for moveJ() first to finish')
     state = con.receive()
     con.send(watchdog)
     if not state.output_bit_registers0_to_31:
         print('Proceeding to mode 2\n')
         break
-time.sleep(0.5)
+print("-------Executing moveJ -----------\n")
+
+# Send Initial Pose
+watchdog.input_int_register_0 = 1
+con.send(watchdog)
+list_to_setp(setp, waypoints[0], offset=0)  # Waypoints in registers 0-5
+con.send(setp) 
+
+while True:
+    print('Waiting for moveJ() first to finish')
+    state = con.receive()
+    con.send(watchdog)
+    if not state.output_bit_registers0_to_31:
+        print('Proceeding to mode 2\n')
+        break
+
 # Execute ServoJ with Smooth Multi-Waypoint Trajectory
 print("-------Executing servoJ  -----------\n")
-watchdog.input_int_register_0 = 3
+watchdog.input_int_register_0 = 2
 con.send(watchdog)
 trajectory_time = 8  # time of min_jerk trajectory
 dt = 1/500  # 500 Hz    # frequency
@@ -213,40 +212,44 @@ time.sleep(0.5)  # Ensure the robot has time to receive and process the movement
 
 print("-------Executing moveJ -----------\n")
 
-watchdog.input_int_register_0 = 4
+watchdog.input_int_register_0 = 3
 # Read the actual joint positions before modification
 actual_position = state.actual_q
 print("Actual joint position before moveJ:", actual_position)
 
-# Compute rotation and modify wrist joint 3 (joint index 5)
-print("Rotation angle in radians added: ", alpha_star_deg)
-rotation_angle_radians = alpha_star  # Example: adding 100 degrees
-position = actual_position[:]  # Copy current joint states
-position = [float(joint) for joint in actual_position]  # Convert to float
-position[5] += rotation_angle_radians  # Apply rotation
+rotation_step = 0.05
+max_attempts = 3
+for attempt in range (max_attempts):
+    print(f"Iteration {attempt+1} ")
+    state = con.recieve()
+    actual_position = state.actual_q
+    print(f"Applying rotation angle of {rotation_step}")
+    position = actual_position[:]  # Copy current joint states
+    position = [float(joint) for joint in actual_position]  # Convert to float
+    if attempt == 0:
+        rotation_angle_radians = alpha_star  # Example: adding 100 degrees
+        position[5] += rotation_angle_radians  # Apply rotation
+        print("Rotation angle in radians added: ", alpha_star_deg)
+    
+    else:
+        position[5] +=rotation_step
 
-print(f"Sent joint positions: {position}")
-list_to_setp(setp, position, offset=6)
-con.send(setp)
-time.sleep(0.5)  # Allow time for movement
-
-# Print what will be sent
-
-
-# Send Initial Pose
-
-con.send(watchdog)
-# list_to_setp(setp, position, offset=6)  # Store position in registers 6-11
-# con.send(setp)
-
-while True:
-    # print('Waiting for moveJ() second to finish...')
-    state = con.receive()
+    print(f"Sent joint positions: {position}")
+    list_to_setp(setp, position, offset=6)
+    con.send(setp)
+    time.sleep(0.5)  # Allow time for movement
     con.send(watchdog)
-    if not state.output_bit_registers0_to_31:
-        print('MoveJ completed, proceeding to next mode\n')
-        break
 
+    while True:
+        print('Waiting for moveJ() second to finish...')
+        state = con.receive()
+        con.send(watchdog)
+        if not state.output_bit_registers0_to_31:
+            print('MoveJ completed, proceeding to next mode\n')
+            break
+    state = con.receive()
+    print("Checking feedback")
+    rotation_step +=0.05
 # Print actual joint positions after execution
 state = con.receive()
 print('--------------------')
@@ -254,8 +257,9 @@ print("Actual joint position after moveJ:", state.actual_q)
 print("Actual TCP pose after moveJ:", state.actual_TCP_pose)
 print("Moved to position: ", d,h)
 print("With a rotation of: ", alpha_star_deg)
+print("With a steering angle of: ", np.rad2deg(theta_l))
 # Mode 3
-watchdog.input_int_register_0 = 5
+watchdog.input_int_register_0 = 4
 con.send(watchdog)
 
 con.send_pause()
