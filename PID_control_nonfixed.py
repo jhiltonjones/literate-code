@@ -212,48 +212,50 @@ time.sleep(0.5)
 
 pid = PIDController(Kp=0.5, Ki=0.1, Kd=0.05, dt=0.1)
 
+# Define missing variables
+max_attempts = 10  # Number of attempts
+rotation_step = 0.05  # PID correction step
+vessel_branch_target = 0.0  # Desired catheter tip position
 
-max_attempts = 10
-rotation_step = 0.05 
-vessel_branch_target_angle = 45 
 
 print("-------Executing moveJ with PID -----------\n")
 
-watchdog.input_int_register_0 = 3 
+watchdog.input_int_register_0 = 3  # Watchdog initialization
 
 for attempt in range(max_attempts):
     print(f"Iteration {attempt + 1}")
-    
 
+    # Receive the latest robot state
     state = con.receive()
-    actual_position = state.actual_q
-    
+    actual_position = state.actual_q  # Store joint positions
+
+    # Move the magnet (Initial move)
     if attempt == 0:
-        print(f"Initial move: Applying rotation angle of {alpha_star}")
-        position = [float(joint) for joint in actual_position] 
-        position[5] += alpha_star 
-        print(f"Moving magnet to position: {position}")
-        list_to_setp(setp, position, offset=6)
-        con.send(setp)
-        time.sleep(0.5) 
-        con.send(watchdog)
+        print(f"Initial move: Applying rotation angle of {np.rad2deg(alpha_star)}")
+        position = [float(joint) for joint in actual_position]
+
+        if len(position) > 5:
+            position[5] += alpha_star  # Apply rotation
+        else:
+            print("Warning: Joint 5 does not exist!")
 
     else:
-        print(f"Initial move: Applying rotation angle of {rotation_step}")
+        print(f"Applying rotation step of {np.rad2deg(rotation_step)}")
+        position = [float(joint) for joint in actual_position]
 
-        position = [float(joint) for joint in actual_position] 
-        temp = alpha_star
-        new_alpha_star = compute_angle(EI, theta_l, length_c, x_p, y_p, x_basis, y_basis, p_norm1)
+        if len(position) > 5:
+            position[5] += rotation_step  # Apply stepwise rotation
+        else:
+            print("Warning: Joint 5 does not exist!")
 
-        position[5] += rotation_step 
+    # Send command to move the magnet
+    print(f"Moving magnet to position: {position}")
+    list_to_setp(setp, position, offset=6)
+    con.send(setp)
+    time.sleep(0.5)  # Allow movement time
+    con.send(watchdog)
 
-        print(f"Moving magnet to position: {position}")
-        list_to_setp(setp, position, offset=6)
-        con.send(setp)
-        time.sleep(0.5) 
-        con.send(watchdog)
-
-
+    # Wait for movement to finish
     i = 0
     while True:
         # print(f'Waiting for moveJ() to finish... {i}')
@@ -263,25 +265,30 @@ for attempt in range(max_attempts):
         if not state.output_bit_registers0_to_31:
             print('MoveJ completed, proceeding to feedback check\n')
             break
-    
 
-    state = con.receive()  
+    # Update state
+    state = con.receive()
     print("Checking feedback...")
 
-    catheter_tip_position = np.random.uniform(44.8, 45.2) 
-    position_error = catheter_tip_position - vessel_branch_target_angle
+    # Simulated catheter tip position (Replace with actual camera input later)
+    catheter_tip_position = np.random.uniform(-0.1, 0.1)  
+    position_error = catheter_tip_position - vessel_branch_target
     print(f"Catheter Tip Position: {catheter_tip_position}, Position Error: {position_error}")
 
-    
-    if abs(position_error) >= 0.003: 
+    # Apply PID correction if needed
+    if abs(position_error) >= 0.005:
         rotation_adjustment = pid.update(position_error)
-        print(f"PID Rotation Adjustment: {rotation_adjustment}")
+        print(f"PID Rotation Adjustment: {np.rad2deg(rotation_adjustment)}")
 
- 
+        # Adjust magnet based on PID output
         state = con.receive()
         actual_position = state.actual_q
-        position = [float(joint) for joint in actual_position]  
-        position[5] += rotation_adjustment 
+        position = [float(joint) for joint in actual_position]
+
+        if len(position) > 5:
+            position[5] += rotation_adjustment
+        else:
+            print("Warning: Joint 5 does not exist!")
 
         print(f"Adjusting magnet based on PID: {position}")
         list_to_setp(setp, position, offset=6)
@@ -289,6 +296,7 @@ for attempt in range(max_attempts):
         time.sleep(0.5)  
         con.send(watchdog)
 
+        # Wait for PID-adjusted movement to complete
         while True:
             print('Waiting for PID-adjusted moveJ() to finish...')
             state = con.receive()
@@ -296,9 +304,11 @@ for attempt in range(max_attempts):
             if not state.output_bit_registers0_to_31:
                 print('PID-adjusted MoveJ completed.\n')
                 break
+
     else:
         print("Error is minimal. No further adjustments needed.")
-        break 
+        break  # Stop early if error is within tolerance
+
 
 print("Final movement completed.")
 print('--------------------')

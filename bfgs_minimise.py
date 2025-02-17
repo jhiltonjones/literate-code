@@ -124,6 +124,7 @@ def find_optimal_alpha_o(EI, theta_l, length_c, x_p, y_p, x_distance, y_distance
   
 # if __name__ == "__main__":
 kappa = compute_curvature(theta_l, length_c)
+print(f"Steering angle desired is {np.rad2deg(theta_l)}")
 print(f"Curvature kappa: {kappa}")
 volume_cath = volume_calculator_cyclinder((s_c/2), length_c_m)
 volume_mag = volume_calculator_cyclinder((h_a/2), h_a)
