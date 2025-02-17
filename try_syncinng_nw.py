@@ -7,8 +7,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from trajectory_planner_line import PathPlanTranslation 
 from rotation_matrix import T, transform_point
-from bfgs_minimise import alpha_star, alpha_star_deg
-from constants import d, h, theta_l
+from bfgs_minimise import alpha_star, alpha_star_deg, compute_angle, length_c, x_p, y_p, p_norm1
+from constants import d, h, theta_l, EI, x_basis, y_basis
 from PID_control import PIDController
 def setp_to_list(setp, offset=0):
     return [setp.__dict__[f"input_double_register_{i + offset}"] for i in range(6)]
@@ -215,7 +215,7 @@ pid = PIDController(Kp=0.5, Ki=0.1, Kd=0.05, dt=0.1)
 
 max_attempts = 10
 rotation_step = 0.05 
-vessel_branch_target = 0.0 
+vessel_branch_target_angle = 45 
 
 print("-------Executing moveJ with PID -----------\n")
 
@@ -223,19 +223,35 @@ watchdog.input_int_register_0 = 3
 
 for attempt in range(max_attempts):
     print(f"Iteration {attempt + 1}")
+    
 
     state = con.receive()
     actual_position = state.actual_q
-    print(f"Initial move: Applying rotation angle of {rotation_step}")
+    
+    if attempt == 0:
+        print(f"Initial move: Applying rotation angle of {alpha_star}")
+        position = [float(joint) for joint in actual_position] 
+        position[5] += alpha_star 
+        print(f"Moving magnet to position: {position}")
+        list_to_setp(setp, position, offset=6)
+        con.send(setp)
+        time.sleep(0.5) 
+        con.send(watchdog)
 
-    position = [float(joint) for joint in actual_position] 
-    position[5] += rotation_step 
+    else:
+        print(f"Initial move: Applying rotation angle of {rotation_step}")
 
-    print(f"Moving magnet to position: {position}")
-    list_to_setp(setp, position, offset=6)
-    con.send(setp)
-    time.sleep(0.5) 
-    con.send(watchdog)
+        position = [float(joint) for joint in actual_position] 
+        temp = alpha_star
+        new_alpha_star = compute_angle(EI, theta_l, length_c, x_p, y_p, x_basis, y_basis, p_norm1)
+
+        position[5] += rotation_step 
+
+        print(f"Moving magnet to position: {position}")
+        list_to_setp(setp, position, offset=6)
+        con.send(setp)
+        time.sleep(0.5) 
+        con.send(watchdog)
 
 
     i = 0
@@ -252,8 +268,8 @@ for attempt in range(max_attempts):
     state = con.receive()  
     print("Checking feedback...")
 
-    catheter_tip_position = np.random.uniform(-0.1, 0.1) 
-    position_error = catheter_tip_position - vessel_branch_target
+    catheter_tip_position = np.random.uniform(44.8, 45.2) 
+    position_error = catheter_tip_position - vessel_branch_target_angle
     print(f"Catheter Tip Position: {catheter_tip_position}, Position Error: {position_error}")
 
     
