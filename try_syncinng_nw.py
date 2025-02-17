@@ -94,7 +94,7 @@ position_list = setp_to_list(setp, offset=6)
 
 
 while True:
-    print('Boolean 1 is False, please click CONTINUE on the Polyscope')
+    # print('Boolean 1 is False, please click CONTINUE on the Polyscope')
     state = con.receive()
     con.send(watchdog)
     if state.output_bit_registers0_to_31:  
@@ -240,7 +240,7 @@ for attempt in range(max_attempts):
 
     i = 0
     while True:
-        print(f'Waiting for moveJ() to finish... {i}')
+        # print(f'Waiting for moveJ() to finish... {i}')
         state = con.receive()
         con.send(watchdog)
         i += 1
@@ -257,7 +257,7 @@ for attempt in range(max_attempts):
     print(f"Catheter Tip Position: {catheter_tip_position}, Position Error: {position_error}")
 
     
-    if abs(position_error) >= 0.005: 
+    if abs(position_error) >= 0.003: 
         rotation_adjustment = pid.update(position_error)
         print(f"PID Rotation Adjustment: {rotation_adjustment}")
 
