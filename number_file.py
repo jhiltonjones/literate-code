@@ -11,3 +11,5 @@ print(f"The euclidean distance is {angle_norm}")
 print(f"The height in the z direction is {z_height}")
 print(f"The difference in x is {x_axis}")
 print(f"The difference in the y axis is {y_axis}")
+output = 20.1 / np.pi
+print(output)
