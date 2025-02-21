@@ -25,7 +25,6 @@ def calculate_bending_angle(realimage):
 
     kernel_large = np.ones((5, 5), np.uint8)  
     binary_mask_cleaned = cv2.morphologyEx(binary_mask_cleaned, cv2.MORPH_OPEN, kernel_large, iterations=3)
-    binary_mask_cleaned = cv2.morphologyEx(binary_mask_cleaned, cv2.MORPH_CLOSE, kernel_large, iterations=3)
 
     contours, _ = cv2.findContours(binary_mask_cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     contours = sorted(contours, key=cv2.contourArea, reverse=True)  
@@ -54,13 +53,13 @@ def calculate_bending_angle(realimage):
 
     bending_angle_deg = np.degrees(np.mean(angles))
 
-    plt.figure(figsize=(8, 6))
-    plt.imshow(binary_mask_cleaned, cmap='gray')
-    plt.plot(x_fit_range, cubic_fit(x_fit_range), color='red', linewidth=2, label="Fitted Cubic Curve")  # Limited range
-    plt.scatter(key_x, key_y, color='blue', label="Key Points")
-    plt.legend()
-    plt.title(f"Corrected Bending Angle: {bending_angle_deg:.2f} degrees")
-    plt.show()
+    # plt.figure(figsize=(8, 6))
+    # plt.imshow(binary_mask_cleaned, cmap='gray')
+    # plt.plot(x_fit_range, cubic_fit(x_fit_range), color='red', linewidth=2, label="Fitted Cubic Curve")  # Limited range
+    # plt.scatter(key_x, key_y, color='blue', label="Key Points")
+    # plt.legend()
+    # plt.title(f"Corrected Bending Angle: {bending_angle_deg:.2f} degrees")
+    # plt.show()
     return bending_angle_deg
 
 if __name__ == "__main__":
