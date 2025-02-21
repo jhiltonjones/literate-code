@@ -10,6 +10,11 @@ from rotation_matrix import T, transform_point
 from bfgs_minimise import alpha_star, alpha_star_deg, compute_angle, length_c, x_p, y_p, p_norm1
 from constants import d, h, theta_l, EI, x_basis, y_basis
 from PID_control import PIDController
+from image_capture import capture_image
+from bending_calculation_try import calculate_bending_angle
+
+
+
 def setp_to_list(setp, offset=0):
     return [setp.__dict__[f"input_double_register_{i + offset}"] for i in range(6)]
 
@@ -112,9 +117,9 @@ print("-------Executing moveJ start -----------\n")
 pid = PIDController(Kp=0.5, Ki=0.1, Kd=0.05, dt=0.1)
 
 
-max_attempts = 3
+max_attempts = 10
 # rotation_step = 0.05 
-vessel_branch_target_angle = 45 
+vessel_branch_target_angle = theta_l
 
 print("-------Executing moveJ with PID -----------\n")
 
@@ -160,12 +165,23 @@ for attempt in range(max_attempts):
     print("Checking feedback...")
     state = con.receive()
 
-    catheter_tip_position = np.random.uniform(44.8, 45.2) 
-    position_error = catheter_tip_position - vessel_branch_target_angle
+    # catheter_tip_position = np.random.uniform(44.8, 45.2) 
+    real_image = capture_image()
+    
+    if theta_l >0:
+        scaler = 1
+    else:
+        scaler = -1
+    catheter_tip_position = np.deg2rad(scaler * calculate_bending_angle(real_image))
+ 
+    print("Desired angle is: ", np.rad2deg(vessel_branch_target_angle))
+    print("Actual angle is: ",np.rad2deg(catheter_tip_position))
+
+    position_error = np.abs(catheter_tip_position - vessel_branch_target_angle)
     print(f"Catheter Tip Position: {catheter_tip_position}, Position Error: {position_error}")
 
     
-    if abs(position_error) >= 0.003: 
+    if abs(position_error) >= 0.03: 
         rotation_adjustment = pid.update(position_error)
         print(f"PID Rotation Adjustment: {rotation_adjustment}")
 
@@ -173,7 +189,7 @@ for attempt in range(max_attempts):
         state = con.receive()
         actual_position = state.actual_q
         position = [float(joint) for joint in actual_position]  
-        position[5] += rotation_adjustment 
+        position[5] -= rotation_adjustment 
         # position[5] += 0.1
 
         print(f"Adjusting magnet based on PID: {position}")
