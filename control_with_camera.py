@@ -11,7 +11,7 @@ from bfgs_minimise import alpha_star, alpha_star_deg, compute_angle, length_c, x
 from constants import d, h, theta_l, EI, x_basis, y_basis
 from PID_control import PIDController
 from image_capture import capture_image
-from bending_calculation_try import calculate_bending_angle
+from bending_calculation import calculate_bending_angle
 
 
 
@@ -167,7 +167,7 @@ for attempt in range(max_attempts):
 
     # catheter_tip_position = np.random.uniform(44.8, 45.2) 
     real_image = capture_image()
-    
+
     if theta_l >0:
         scaler = 1
     else:
