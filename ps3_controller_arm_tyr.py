@@ -3,6 +3,7 @@ import logging
 import rtde.rtde as rtde
 import rtde.rtde_config as rtde_config
 import time
+import evdev
 import numpy as np
 import matplotlib.pyplot as plt
 from trajectory_planner_line import PathPlanTranslation 
@@ -10,11 +11,6 @@ from rotation_matrix import T, transform_point
 from bfgs_minimise import alpha_star, alpha_star_deg, compute_angle, length_c, x_p, y_p, p_norm1
 from constants import d, h, theta_l, EI, x_basis, y_basis
 from PID_control import PIDController
-from image_capture import capture_image
-from bending_calculation import calculate_bending_angle
-plot = True
-
-
 def setp_to_list(setp, offset=0):
     return [setp.__dict__[f"input_double_register_{i + offset}"] for i in range(6)]
 
@@ -75,6 +71,7 @@ transformed_points = transform_point(T, d, h)
 x_robotic_arm = transformed_points[0]
 y_robotic_arm = transformed_points[1]
 
+# start_point = [-1.7749140898333948, -1.8188401661314906, 2.519264046345846, 4.06753317892041, -1.5926616827594202, 0.3149070739746094]
 start_point = [-1.7749140898333948, -1.8188401661314906, 2.519264046345846, 4.06753317892041, -1.5926616827594202, 0.3149070739746094]
 
 waypoints = [
@@ -117,9 +114,9 @@ print("-------Executing moveJ start -----------\n")
 pid = PIDController(Kp=0.5, Ki=0.1, Kd=0.05, dt=0.1)
 
 
-max_attempts = 20
+max_attempts = 3
 # rotation_step = 0.05 
-vessel_branch_target_angle = theta_l
+vessel_branch_target_angle = 45 
 
 print("-------Executing moveJ with PID -----------\n")
 
@@ -156,84 +153,82 @@ while True:
     if not state.output_bit_registers0_to_31:
         print('MoveJ completed, proceeding to feedback check\n')
         break
+device_path = "/dev/input/event262"  
+try:
+    controller = evdev.InputDevice(device_path)
+    print(f"Using device: {controller.path} ({controller.name})")
+except FileNotFoundError:
+    print(f"Device not found at {device_path}. Check permissions and connection.")
+    sys.exit()
 
-watchdog.input_int_register_0 = 2
-con.send(watchdog) 
-for attempt in range(max_attempts):
-    print(f"Iteration {attempt + 1}")
-    
-    print("Checking feedback...")
-    state = con.receive()
+# --------------------- Robot Control Variables ---------------------
+joystick_deadzone = 10  
+scale_factor = 0.01  
 
-    # catheter_tip_position = np.random.uniform(44.8, 45.2) 
-    real_image = capture_image()
+# --------------------- Read Controller Input and Move Robot ---------------------
+print("Use the PS3 controller to move the UR robot. Press Ctrl+C to exit.")
 
-    if theta_l >0:
-        scaler = 1
-    else:
-        scaler = -1
-    catheter_tip_position = np.deg2rad(scaler * calculate_bending_angle(real_image, plot))
- 
-    print("Desired angle is: ", np.rad2deg(vessel_branch_target_angle))
-    print("Actual angle is: ",np.rad2deg(catheter_tip_position))
+move_x = 0
+move_y = 0
+move_rotation = 0
 
-    position_error = catheter_tip_position - vessel_branch_target_angle
-    print(f"Catheter Tip Position: {catheter_tip_position}, Position Error: {position_error}")
+try:
+    for event in controller.read_loop():
+        if event.type == evdev.ecodes.EV_ABS:
+            event_code = evdev.ecodes.bytype[event.type].get(event.code, f"Unknown({event.code})")
+            event_value = event.value
 
-    
-    if abs(position_error) >= 0.03: 
-        rotation_adjustment = pid.update(position_error)
-        print(f"PID Rotation Adjustment: {rotation_adjustment}")
+            if event_code == "ABS_X":  
+                move_x = (event_value - 128) / 128.0
+                if abs(move_x) > (joystick_deadzone / 128.0):
+                    move_x *= scale_factor
+                else:
+                    move_x = 0
 
- 
+            elif event_code == "ABS_Y":  
+                move_y = (event_value - 128) / 128.0
+                if abs(move_y) > (joystick_deadzone / 128.0):
+                    move_y *= scale_factor
+                else:
+                    move_y = 0
+
+            elif event_code == "ABS_RY":  
+                move_rotation = (event_value - 128) / 128.0
+                if abs(move_rotation) > (joystick_deadzone / 128.0):
+                    move_rotation *= scale_factor
+                else:
+                    move_rotation = 0
+
+        # ---------------- Update Robot Position ---------------------
         state = con.receive()
-        actual_position = state.actual_q
-        position = [float(joint) for joint in actual_position]  
-        position[5] -= rotation_adjustment 
-        # position[5] += 0.1
+        actual_position = list(state.actual_q)
 
-        print(f"Adjusting magnet based on PID: {position}")
-        list_to_setp(setp, position, offset=6)
-        con.send(setp)
-        time.sleep(0.5)  
+        actual_position[0] += move_x
+        actual_position[1] += move_y
+        actual_position[5] += move_rotation
+
+        for i in range(6):
+            setp.__dict__[f"input_double_register_{i + 6}"] = actual_position[i]
+
+        if con.is_connected():
+            try:
+                con.send(setp)
+            except BrokenPipeError:
+                print("⚠️ Connection lost! Reconnecting...")
+                con.disconnect()
+                time.sleep(1)
+                con.connect()
+                con.send(setp)  
+
         con.send(watchdog)
+        time.sleep(0.01)  
 
-        while True:
-            # print('Waiting for PID-adjusted moveJ() to finish...')
-            state = con.receive()
-            con.send(watchdog)
-            if not state.output_bit_registers0_to_31:
-                print('PID-adjusted MoveJ completed.\n')
-                break
-    else:
-        print("Error is minimal. No further adjustments needed.")
-        break
-state = con.receive()
-# time.sleep(1.5) 
-
-watchdog.input_int_register_0 = 3
-con.send(watchdog)
-# time.sleep(1.5) 
-if reset == True:
-    print("Completing rotation reset")
-    list_to_setp(setp, start_point, offset=6)
-    con.send(setp)
-    # time.sleep(0.5)
-    # con.send(watchdog)
-    while True:
-        con.receive()
-        con.send(watchdog)
-        if not state.output_bit_registers0_to_31:
-            break 
-
-print("Final movement completed.")
-print('--------------------')
-print("Actual joint position after moveJ:", state.actual_q)
-print("Actual TCP pose after moveJ:", state.actual_TCP_pose)
-print("Moved to position: ", d,h)
-print("With a rotation of: ", alpha_star_deg)
-print("With a steering angle of: ", np.rad2deg(theta_l))
-
+except KeyboardInterrupt:
+    print("\nStopping robot and exiting.")
+    watchdog.input_int_register_0 = 4
+    con.send(watchdog)
+    con.send_pause()
+    con.disconnect()
 
 watchdog.input_int_register_0 = 4
 con.send(watchdog)
