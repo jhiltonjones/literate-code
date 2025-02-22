@@ -12,7 +12,7 @@ from constants import d, h, theta_l, EI, x_basis, y_basis
 from PID_control import PIDController
 from image_capture import capture_image
 from bending_calculation import calculate_bending_angle
-
+plot = True
 
 
 def setp_to_list(setp, offset=0):
@@ -172,12 +172,12 @@ for attempt in range(max_attempts):
         scaler = 1
     else:
         scaler = -1
-    catheter_tip_position = np.deg2rad(scaler * calculate_bending_angle(real_image))
+    catheter_tip_position = np.deg2rad(scaler * calculate_bending_angle(real_image, plot))
  
     print("Desired angle is: ", np.rad2deg(vessel_branch_target_angle))
     print("Actual angle is: ",np.rad2deg(catheter_tip_position))
 
-    position_error = np.abs(catheter_tip_position - vessel_branch_target_angle)
+    position_error = catheter_tip_position - vessel_branch_target_angle
     print(f"Catheter Tip Position: {catheter_tip_position}, Position Error: {position_error}")
 
     
@@ -209,7 +209,7 @@ for attempt in range(max_attempts):
         print("Error is minimal. No further adjustments needed.")
         break
 state = con.receive()
-time.sleep(1.5) 
+# time.sleep(1.5) 
 
 watchdog.input_int_register_0 = 3
 con.send(watchdog)
@@ -218,8 +218,8 @@ if reset == True:
     print("Completing rotation reset")
     list_to_setp(setp, start_point, offset=6)
     con.send(setp)
-    time.sleep(0.5)
-    con.send(watchdog)
+    # time.sleep(0.5)
+    # con.send(watchdog)
     while True:
         con.receive()
         con.send(watchdog)
