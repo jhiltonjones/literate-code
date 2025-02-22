@@ -117,7 +117,7 @@ print("-------Executing moveJ start -----------\n")
 pid = PIDController(Kp=0.5, Ki=0.1, Kd=0.05, dt=0.1)
 
 
-max_attempts = 10
+max_attempts = 20
 # rotation_step = 0.05 
 vessel_branch_target_angle = theta_l
 

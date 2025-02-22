@@ -37,8 +37,20 @@ def calculate_bending_angle(realimage, plot):
             y_fit = poly(x)
             return np.sum((y - y_fit) ** 2)  
 
+        def polynomial_loss_gradient(coeffs, x, y):
+            poly = np.poly1d(coeffs)
+            y_fit = poly(x)
+            
+            grad = np.zeros_like(coeffs)
+            for i in range(len(coeffs)):  
+                grad[i] = -2 * np.sum((y - y_fit) * (x ** (len(coeffs) - 1 - i)))
+            
+            return grad
+
         initial_coeffs = np.polyfit(x_vals, y_vals, 5)
-        result = minimize(polynomial_loss, initial_coeffs, args=(x_vals, y_vals), method='Powell')
+
+        result = minimize(polynomial_loss, initial_coeffs, args=(x_vals, y_vals), method='BFGS', jac=polynomial_loss_gradient)
+
         optimized_coeffs = result.x
 
         poly_fit = np.poly1d(optimized_coeffs)
@@ -69,6 +81,7 @@ def calculate_bending_angle(realimage, plot):
         theta_mid_start = np.degrees(np.arctan(slope_mid_start))  
         theta_mid_end = np.degrees(np.arctan(slope_mid_end))  
         theta_end = np.degrees(np.arctan(slope_end))  
+        
         theta_start_2 = np.degrees(np.arctan(slope_start))  
         theta_mid_start_2 = np.degrees(np.arctan(slope_mid_start))  
         theta_mid_end_2 = np.degrees(np.arctan(slope_mid_end))  
