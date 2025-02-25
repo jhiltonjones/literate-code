@@ -73,7 +73,7 @@ if __name__ == "__main__":
     print(f"Center of Catheter: x_c = {x_c}, y_c = {y_c}")
 
     Volume_catheter = volume_calculator_cyclinder(s_c, length_c)
-    Volume_magnet = volume_calculator_cyclinder(s_a, h_a)
+    Volume_magnet = volume_calculator_cyclinder(s_a, d_a)
 
     # p_hat = compute_unit_position_vector(x_c, y_c, d, h)
     print("Center of catheter is: ", x_c, y_c)

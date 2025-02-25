@@ -12,7 +12,23 @@ from constants import d, h, theta_l, EI, x_basis, y_basis
 from PID_control import PIDController
 from image_capture import capture_image
 from bending_calculation import calculate_bending_angle
+import os
 plot = True
+
+log_dir = "/home/jack/literate-code/"
+os.makedirs(log_dir, exist_ok=True)
+log_file_path = os.path.join(log_dir, "steering_angles_log.txt")
+
+def log_steering_angles(desired_angle, actual_angle, filename=log_file_path):
+    """Logs the desired and actual steering angles to a text file."""
+    log_entry = f"Desired Angle: {desired_angle:.2f} degrees, Actual Angle: {actual_angle:.2f} degrees\n"
+    
+    with open(filename, "a") as file:
+        file.write(log_entry)
+
+    print(f"Logged: {log_entry.strip()}")
+
+
 
 
 def setp_to_list(setp, offset=0):
@@ -75,7 +91,7 @@ transformed_points = transform_point(T, d, h)
 x_robotic_arm = transformed_points[0]
 y_robotic_arm = transformed_points[1]
 
-start_point = [-1.7749140898333948, -1.8188401661314906, 2.519264046345846, 4.06753317892041, -1.5926616827594202, 0.3149070739746094]
+start_point = [-1.7751691977130335, -1.8183876476683558, 2.524095598851339, 4.067812128657959, -1.5922463575946253, 1.460402250289917]
 
 waypoints = [
     [-2.7217212359057825, -1.2940319341472168, 1.286574665700094, -1.5805064640440882, -1.5797279516803187, 2.6362221240997314],
@@ -117,7 +133,7 @@ print("-------Executing moveJ start -----------\n")
 pid = PIDController(Kp=0.5, Ki=0.1, Kd=0.05, dt=0.1)
 
 
-max_attempts = 20
+max_attempts = 3
 # rotation_step = 0.05 
 vessel_branch_target_angle = theta_l
 
@@ -176,6 +192,7 @@ for attempt in range(max_attempts):
  
     print("Desired angle is: ", np.rad2deg(vessel_branch_target_angle))
     print("Actual angle is: ",np.rad2deg(catheter_tip_position))
+    log_steering_angles(np.rad2deg(vessel_branch_target_angle), np.rad2deg(catheter_tip_position))
 
     position_error = catheter_tip_position - vessel_branch_target_angle
     print(f"Catheter Tip Position: {catheter_tip_position}, Position Error: {position_error}")
@@ -207,17 +224,23 @@ for attempt in range(max_attempts):
                 break
     else:
         print("Error is minimal. No further adjustments needed.")
+        state = con.receive()
         break
+
 state = con.receive()
-# time.sleep(1.5) 
+time.sleep(0.5) 
 
 watchdog.input_int_register_0 = 3
 con.send(watchdog)
-# time.sleep(1.5) 
+# time.sleep(0.5) 
 if reset == True:
     print("Completing rotation reset")
     list_to_setp(setp, start_point, offset=6)
     con.send(setp)
+    # time.sleep(0.5)  
+    con.send(watchdog)
+    
+    # con.receive()
     # time.sleep(0.5)
     # con.send(watchdog)
     while True:

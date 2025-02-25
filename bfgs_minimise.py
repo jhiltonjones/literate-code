@@ -127,7 +127,7 @@ kappa = compute_curvature(theta_l, length_c)
 print(f"Steering angle desired is {np.rad2deg(theta_l)}")
 print(f"Curvature kappa: {kappa}")
 volume_cath = volume_calculator_cyclinder((s_c/2), length_c_m)
-volume_mag = volume_calculator_cyclinder((h_a/2), h_a)
+volume_mag = volume_calculator_cyclinder((h_a/2), d_a)
 print("Volume of magnet is: ", volume_mag)
 print("Volume of catheter is: ", volume_cath)
 

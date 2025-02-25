@@ -1,0 +1,32 @@
+
+
+Desired Angle: 15.00 degrees, Actual Angle: 12.39 degrees
+Desired Angle: 15.00 degrees, Actual Angle: 10.52 degrees
+Desired Angle: 15.00 degrees, Actual Angle: 22.76 degrees
+
+Desired Angle: 25.00 degrees, Actual Angle: 22.47 degrees
+Desired Angle: 25.00 degrees, Actual Angle: 23.45 degrees
+
+Desired Angle: 35.00 degrees, Actual Angle: 29.46 degrees
+Desired Angle: 35.00 degrees, Actual Angle: 33.03 degrees
+Desired Angle: 35.00 degrees, Actual Angle: 33.60 degrees
+
+Desired Angle: 45.00 degrees, Actual Angle: 37.00 degrees
+Desired Angle: 45.00 degrees, Actual Angle: 42.30 degrees
+Desired Angle: 45.00 degrees, Actual Angle: 38.64 degrees
+
+Desired Angle: -15.00 degrees, Actual Angle: -24.17 degrees
+Desired Angle: -15.00 degrees, Actual Angle: -21.77 degrees
+Desired Angle: -15.00 degrees, Actual Angle: -22.69 degrees
+
+Desired Angle: -25.00 degrees, Actual Angle: -32.24 degrees
+Desired Angle: -25.00 degrees, Actual Angle: -30.11 degrees
+Desired Angle: -25.00 degrees, Actual Angle: -30.42 degrees
+
+Desired Angle: -35.00 degrees, Actual Angle: -39.15 degrees
+Desired Angle: -35.00 degrees, Actual Angle: -34.52 degrees
+
+Desired Angle: -45.00 degrees, Actual Angle: -42.10 degrees
+Desired Angle: -45.00 degrees, Actual Angle: -45.29 degrees
+
+

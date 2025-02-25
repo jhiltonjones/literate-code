@@ -25,6 +25,7 @@ def compute_torque(c_vector, m_vector, p, n_0):
 
 def volume_calculator_cyclinder(radius, height):
     volume = np.pi * radius**2 * height
+    # print("Height",height)
     return volume
 
 def magnetic_moment(mu_0, B, Volume, m_hat):
