@@ -13,6 +13,7 @@ from PID_control import PIDController
 from image_capture import capture_image
 from bending_calculation import calculate_bending_angle
 import os
+from mpc_try import mpc
 plot = True
 
 log_dir = "/home/jack/literate-code/"
@@ -130,9 +131,6 @@ print("-------Executing moveJ start -----------\n")
 
 
 
-pid = PIDController(Kp=0.5, Ki=0.1, Kd=0.05, dt=0.1)
-
-
 max_attempts = 3
 # rotation_step = 0.05 
 vessel_branch_target_angle = theta_l
@@ -199,28 +197,40 @@ for attempt in range(max_attempts):
 
     
     if abs(position_error) >= 0.03: 
-        rotation_adjustment = pid.update(position_error)
-        print(f"PID Rotation Adjustment: {rotation_adjustment}")
-
- 
+        # Send new magnet rotation command
         state = con.receive()
         actual_position = state.actual_q
-        position = [float(joint) for joint in actual_position]  
-        position[5] -= rotation_adjustment 
-        # position[5] += 0.1
+        position = [float(joint) for joint in actual_position]
+        optimal_magnet_rotation =   mpc(vessel_branch_target_angle, catheter_tip_position)
+        position[5] += optimal_magnet_rotation  # Apply computed MPC adjustment
 
-        print(f"Adjusting magnet based on PID: {position}")
+        print(f"Applying MPC correction: {optimal_magnet_rotation} degrees")
         list_to_setp(setp, position, offset=6)
         con.send(setp)
         time.sleep(0.5)  
         con.send(watchdog)
+        # rotation_adjustment = pid.update(position_error)
+        # print(f"PID Rotation Adjustment: {rotation_adjustment}")
+
+ 
+        # state = con.receive()
+        # actual_position = state.actual_q
+        # position = [float(joint) for joint in actual_position]  
+        # position[5] -= rotation_adjustment 
+        # # position[5] += 0.1
+
+        # print(f"Adjusting magnet based on PID: {position}")
+        # list_to_setp(setp, position, offset=6)
+        # con.send(setp)
+        # time.sleep(0.5)  
+        # con.send(watchdog)
 
         while True:
             # print('Waiting for PID-adjusted moveJ() to finish...')
             state = con.receive()
             con.send(watchdog)
             if not state.output_bit_registers0_to_31:
-                print('PID-adjusted MoveJ completed.\n')
+                print('MPC-adjusted MoveJ completed.\n')
                 break
     else:
         print("Error is minimal. No further adjustments needed.")
