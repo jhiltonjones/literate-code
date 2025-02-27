@@ -50,7 +50,8 @@ if __name__ == "__main__":
     answer_deg = radians_to_degrees(theta)
     print("Answer in degrees is: ", answer_deg)
     print("The steering angle is: ", np.rad2deg(theta_l))
-    
+    print("The steering angle is: ", theta_l)
+
     # answer_rad = degrees_to_radians(-53.91)
     # print("In radians this is: ", answer_rad)
 
