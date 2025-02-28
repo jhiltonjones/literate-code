@@ -23,7 +23,7 @@ def calculate_bending_angle(realimage, plot):
         x_vals = largest_contour[:, 0]
         y_vals = largest_contour[:, 1]
 
-        valid_indices = (x_vals <= 1250) & (x_vals > 600)
+        valid_indices = (x_vals <= 1200) & (x_vals > 800)
         x_vals = x_vals[valid_indices]
         y_vals = y_vals[valid_indices]
 
@@ -89,7 +89,7 @@ def calculate_bending_angle(realimage, plot):
 
         bending_angle_deg_2 = max(abs(theta_start_2), abs(theta_mid_start_2), abs(theta_mid_end_2), abs(theta_end_2))
 
-        bending_angle_deg = abs((theta_start + theta_mid_start) / 2 - (theta_mid_end + theta_end) / 2)
+        bending_angle_deg = abs((theta_start + theta_end) / 2)
         if plot == True:
             plt.figure(figsize=(8, 6))
             plt.imshow(binary_mask_cleaned, cmap='gray')
@@ -105,7 +105,10 @@ def calculate_bending_angle(realimage, plot):
             plt.legend()
             plt.title(f"Bending Angle: {bending_angle_deg_2:.2f} degrees")
             
-            plt.show()
+            plt.show(block=False)
+            plt.pause(1.8)
+            plt.close()
+            # plt.show()
 
         # return bending_angle_deg, bending_angle_deg_2
         return bending_angle_deg_2

@@ -19,7 +19,8 @@ v_r = 0.006 #m/s insertion speed
 epsilon = 0.0012 #m detection threshold
 I = np.eye(3)
 # theta_l =np.radians(75.76)
-theta_l =np.radians(20)
+theta_l =np.radians(45)
+theta_l2 = (np.radians(30))
 # theta_l =np.radians(-53.91)
 theta_f = np.pi / 6
 # p = [0,0.05,0.05]
@@ -47,6 +48,7 @@ def theta_plan(x_basis, t_basis):
 if __name__ == "__main__":
     theta = theta_plan(x_basis, t_basis)
     print("Theta is: ", theta)
+    print(np.deg2rad(3))
     answer_deg = radians_to_degrees(theta)
     print("Answer in degrees is: ", answer_deg)
     print("The steering angle is: ", np.rad2deg(theta_l))
