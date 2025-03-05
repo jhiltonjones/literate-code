@@ -5,7 +5,9 @@ from scipy.optimize import minimize
 
 def calculate_bending_angle(realimage, plot):
     image = cv2.imread(realimage, cv2.IMREAD_GRAYSCALE)
-
+    if image is None:
+        raise FileNotFoundError(f"Image file '{realimage}' not found or cannot be opened.")
+    image = cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
     blurred = cv2.GaussianBlur(image, (5, 5), 0)
     _, binary_mask = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
@@ -23,7 +25,7 @@ def calculate_bending_angle(realimage, plot):
         x_vals = largest_contour[:, 0]
         y_vals = largest_contour[:, 1]
 
-        valid_indices = (x_vals <= 1200) & (x_vals > 800)
+        valid_indices = (x_vals <= 900) & (x_vals > 0)
         x_vals = x_vals[valid_indices]
         y_vals = y_vals[valid_indices]
 
@@ -106,7 +108,7 @@ def calculate_bending_angle(realimage, plot):
             plt.title(f"Bending Angle: {bending_angle_deg_2:.2f} degrees")
             
             plt.show(block=False)
-            plt.pause(1.8)
+            plt.pause(0.5)
             plt.close()
             # plt.show()
 

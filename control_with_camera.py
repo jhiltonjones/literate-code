@@ -91,7 +91,7 @@ transformed_points = transform_point(T, d, h)
 x_robotic_arm = transformed_points[0]
 y_robotic_arm = transformed_points[1]
 
-start_point = [-1.7791536490069788, -1.8188110790648402, 2.5318015257464808, 4.065825625056885, -1.5929163138019007, 3.3860762119293213]
+start_point = [-1.3657305876361292, -1.326026366358139, 2.4396541754352015, 3.6122347551533203, -1.5614846388446253, 3.5069069862365723]
 
 waypoints = [
     [-2.7217212359057825, -1.2940319341472168, 1.286574665700094, -1.5805064640440882, -1.5797279516803187, 2.6362221240997314],
@@ -133,7 +133,7 @@ print("-------Executing moveJ start -----------\n")
 pid = PIDController(Kp=0.5, Ki=0.1, Kd=0.05, dt=0.1)
 
 
-max_attempts = 3
+max_attempts = 5
 # rotation_step = 0.05 
 vessel_branch_target_angle = theta_l
 
@@ -264,3 +264,5 @@ time.sleep(1.5)
 con.send_pause()
 con.disconnect()
 print("Disconnected")
+time.sleep(1.5)
+capture_image()

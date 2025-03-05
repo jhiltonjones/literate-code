@@ -1,50 +1,40 @@
 import serial.tools.list_ports
+import time
 
 def arduino_control(command):
     ports = serial.tools.list_ports.comports()
     serialInst = serial.Serial()
-    portsList = []
+    portsList = [one.device for one in ports]
 
-    for one in ports:
-        portsList.append(one.device)
-        print(one.device)  
-
-    # com = input("Select the full port path for Arduino (e.g., /dev/ttyACM0): ")
-    com = "/dev/ttyACM0"
+    print(f"Available Ports: {portsList}")  
+    com = "/dev/ttyACM1"  
 
     if com in portsList:
         serialInst.baudrate = 9600
         serialInst.port = com
         serialInst.open()
-        serialInst.flush() 
+        time.sleep(3) 
+        serialInst.flush()
         print(f"Connected to {com}")
-
     else:
         print("Invalid port selected.")
         exit()
 
-    while True:
-        # command = input("Arduino Command (ON/OFF/exit): ")
-        
-        serialInst.write((command + "\n").encode('utf-8'))  
+    print(f"Sending command: {command}")
+    serialInst.write((command + "\r\n").encode('utf-8'))  
 
-        response = serialInst.readline().decode('utf-8').strip()
-        print(f"Arduino: {response}") 
-        serialInst.close()
-        print("Connection closed") 
-        break
-        # if command.lower() == 'exit':
-        #     serialInst.close()
-        #     print("Connection closed.")
-        #     break
+    time.sleep(1)  
+    response = serialInst.readline().decode('utf-8').strip()
+    print(f"Arduino: {response}")
+
+    serialInst.close()
+    print("Connection closed.")
+
 def distance_arduino(distance):
-    travel =  distance / 0.118
+    travel = distance / 0.118
     return travel
 
-
 if __name__ == '__main__':
-    distance = 50
+    distance = 10
     travel = str(distance_arduino(distance))
-    arduino_control(f'REV {travel}')
-
-
+    arduino_control(f'ON {travel}')  
