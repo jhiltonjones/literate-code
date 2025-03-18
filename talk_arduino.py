@@ -7,7 +7,7 @@ def arduino_control(command):
     portsList = [one.device for one in ports]
 
     print(f"Available Ports: {portsList}")  
-    com = "/dev/ttyACM1"  
+    com = "/dev/ttyACM0"  
 
     if com in portsList:
         serialInst.baudrate = 9600
@@ -35,6 +35,6 @@ def distance_arduino(distance):
     return travel
 
 if __name__ == '__main__':
-    distance = 40
+    distance = 30
     travel = str(distance_arduino(distance))
-    arduino_control(f'REV {travel}')  
+    arduino_control(f'ON {travel}')  

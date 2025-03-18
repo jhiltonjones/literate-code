@@ -7,6 +7,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 from trajectory_planner_line import PathPlanTranslation  # Ensure this module is available
 from bfgs_minimise import alpha_star
+import os
+import threading
+from talk_arduino import arduino_control, distance_arduino
+
+translate =True
+def send_arduino_command(command):
+    arduino_thread = threading.Thread(target=arduino_control, args=(command,))
+    arduino_thread.start()
+    return arduino_thread
+
 # -------- functions -------------
 def setp_to_list(setp, offset=0):
     return [setp.__dict__[f"input_double_register_{i + offset}"] for i in range(6)]
@@ -17,7 +27,10 @@ def list_to_setp(setp, lst, offset=0):
     for i in range(6):
         setp.__dict__[f"input_double_register_{i + offset}"] = lst[i]
     return setp
-
+distance = 40
+travel = str(distance_arduino(distance))
+if translate == True:
+    arduino_thread = send_arduino_command(f'REV {travel}')
 # ------------- Robot Communication Setup -----------------
 ROBOT_HOST = '192.168.56.101'
 ROBOT_PORT = 30004
@@ -115,7 +128,7 @@ while True:
 print("-------Executing servoJ  -----------\n")
 watchdog.input_int_register_0 = 2
 con.send(watchdog)
-trajectory_time = 8  # time of min_jerk trajectory
+trajectory_time = 5 # time of min_jerk trajectory
 dt = 1/500  # 500 Hz    # frequency
 plotter = True
 if plotter:
@@ -189,7 +202,10 @@ state = con.receive()
 time.sleep(0.5)  # Ensure the robot has time to receive and process the movement
 
 print("-------Executing moveJ -----------\n")
-
+distance = 25
+travel = str(distance_arduino(distance))
+if translate == True:
+    arduino_thread = send_arduino_command(f'REV {travel}')
 watchdog.input_int_register_0 = 3
 # Read the actual joint positions before modification
 actual_position = state.actual_q
@@ -231,7 +247,12 @@ print("Actual TCP pose after moveJ:", state.actual_TCP_pose)
 # Mode 3
 
 
+distance = 25
+travel = str(distance_arduino(distance))
+if translate == True:
+    arduino_thread = send_arduino_command(f'REV {travel}')
 
+time.sleep(2)
 print("-------Executing servoJ  -----------\n")
 watchdog.input_int_register_0 = 4
 con.send(watchdog)
@@ -266,7 +287,7 @@ actual_position2 = state.actual_TCP_pose
 position2 = [float(joint) for joint in actual_position2] 
 waypoints2 = [
     position2, # Start
-    [-0.21236683511122087, 0.4444294863454556, 0.19219693555576167, 3.0877081410836555, 0.4722853692519612, -0.006500824985932588]
+    [-0.21237397466108404, 0.6210606399408206, 0.19223177100673028, 2.946018466900301, 1.0233272068393684, -0.008867567968745419]
 ]
 orientation_const2 = waypoints2[0][3:]
 
@@ -325,7 +346,7 @@ actual_position = state.actual_q
 print("Actual joint position before moveJ:", actual_position)
 
 # Compute rotation and modify wrist joint 3 (joint index 5)
-rotation_angle_radians = alpha_star  # Example: adding 100 degrees
+rotation_angle_radians = -alpha_star # Example: adding 100 degrees
 position2 = actual_position[:]  # Copy current joint states
 position2 = [float(joint) for joint in actual_position]  # Convert to float
 position2[5] += rotation_angle_radians  # Apply rotation
@@ -365,7 +386,10 @@ con.send(watchdog)
 
 con.send_pause()
 con.disconnect()
-
+distance = 25
+travel = str(distance_arduino(distance))
+if translate == True:
+    arduino_thread = send_arduino_command(f'REV {travel}')
 # Plot Results
 # Plot Results
 if plotter:

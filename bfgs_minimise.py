@@ -150,4 +150,4 @@ p_unit = x_p * x_basis + y_p * y_basis
 # print(f"Optimal α_o* (degrees): {np.degrees(alpha_o_star):.3f}°")
 alpha_star = compute_angle(EI, theta_l, length_c, x_p, y_p, x_basis, y_basis, p_norm1)
 alpha_star_deg = np.rad2deg(alpha_star)
-print("Final Alpha is: ", alpha_star_deg)
+print("Final Alpha is: ", alpha_star)
