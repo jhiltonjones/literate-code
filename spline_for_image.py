@@ -36,4 +36,4 @@ plt.show()
 # Optional: print coordinates
 print("Selected ring coordinates (x, y):")
 for i, (xi, yi) in enumerate(zip(x, y)):
-    print(f"Ring {i+1}: ({xi:.1f}, {yi:.1f})")
+    print(f"({xi:.1f}, {yi:.1f}),")

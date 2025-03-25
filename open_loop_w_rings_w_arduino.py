@@ -6,12 +6,12 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from trajectory_planner_line import PathPlanTranslation  # Ensure this module is available
-from bfgs_minimise import alpha_star
+from bfgs_minimise import alpha_star, compute_angle, compute_curvature, volume_calculator_cyclinder, compute_center_of_catheter, compute_unit_position_vector
 import os
 import threading
 from talk_arduino import arduino_control, distance_arduino
-
-translate =True
+from constants import *
+translate =False
 def send_arduino_command(command):
     arduino_thread = threading.Thread(target=arduino_control, args=(command,))
     arduino_thread.start()
@@ -27,7 +27,7 @@ def list_to_setp(setp, lst, offset=0):
     for i in range(6):
         setp.__dict__[f"input_double_register_{i + offset}"] = lst[i]
     return setp
-distance = 40
+distance = 40  
 travel = str(distance_arduino(distance))
 if translate == True:
     arduino_thread = send_arduino_command(f'REV {travel}')
@@ -73,8 +73,8 @@ if not con.send_start():
 
 # Define Waypoints for Continuous Trajectory
 waypoints = [
-    [-0.21237229529507512, 0.4045953000402742, 0.19220975854018513, 2.933416444790821, 1.0590506183774688, -0.009237691249748912],
-    [-0.21392851068451746, 0.4406723894625344, 0.2061502689249597, 2.933416444790821, 1.0590506183774688, -0.009237691249748912] # Start
+    [0.12054048769760504, 0.4082949683478192, 0.22461119073392152, 0.9719199522201973, 2.9741737060449833, -0.0667004517649879],
+    [0.12054246739349583, 0.4783363765516909, 0.22461066969424692, 0.9719123645023171, 2.9741825330052407, -0.06668206717351902] # Start
     # [0.01561346376380156, 0.6392848297605487, 0.3870643751382633, -3.1129835149573597, -0.39044182826995194, -0.02877771799883438],
     # [-0.31561346376380156, 0.6392848297605487, 0.3870643751382633, -3.1129835149573597, -0.39044182826995194, -0.02877771799883438],
     # [-0.31561346376380156, 0.8392848297605487, 0.3870643751382633, -3.1129835149573597, -0.39044182826995194, -0.02877771799883438],
@@ -88,10 +88,10 @@ waypoints = [
 
 
 # position_open_loop = [-1.4874456564532679, -1.552175835972168, 2.503701988850729, 3.7785069185444335, -1.5644429365741175, 0.08028531819581985]
-position_open_loop2 = [-1.4825952688800257, -1.55037002012644, 2.5089641253100794, 3.776845617885254, -1.5674737135516565, -0.6004284063922327]
-orientation_const = waypoints[0][3:]
+position_open_loop2 = [-2.279425923024313, -1.731661935845846, 2.610805336629049, 3.8676439958759765, -1.5944564978228968, 3.068880319595337]
+orientation_const = waypoints[1][3:]
 
-trajectory_time_total = 8 # Total time for full motion
+trajectory_time_total = 5 # Total time for full motion
 trajectory_time_per_segment = trajectory_time_total / (len(waypoints) - 1)  # Split time per segment
 state = con.receive()
 tcp1 = state.actual_TCP_pose
@@ -128,7 +128,7 @@ while True:
 print("-------Executing servoJ  -----------\n")
 watchdog.input_int_register_0 = 2
 con.send(watchdog)
-trajectory_time = 5 # time of min_jerk trajectory
+trajectory_time = 2 # time of min_jerk trajectory
 dt = 1/500  # 500 Hz    # frequency
 plotter = True
 if plotter:
@@ -202,7 +202,7 @@ state = con.receive()
 time.sleep(0.5)  # Ensure the robot has time to receive and process the movement
 
 print("-------Executing moveJ -----------\n")
-distance = 25
+distance = 55
 travel = str(distance_arduino(distance))
 if translate == True:
     arduino_thread = send_arduino_command(f'REV {travel}')
@@ -247,11 +247,6 @@ print("Actual TCP pose after moveJ:", state.actual_TCP_pose)
 # Mode 3
 
 
-distance = 25
-travel = str(distance_arduino(distance))
-if translate == True:
-    arduino_thread = send_arduino_command(f'REV {travel}')
-
 time.sleep(2)
 print("-------Executing servoJ  -----------\n")
 watchdog.input_int_register_0 = 4
@@ -287,7 +282,7 @@ actual_position2 = state.actual_TCP_pose
 position2 = [float(joint) for joint in actual_position2] 
 waypoints2 = [
     position2, # Start
-    [-0.21237397466108404, 0.6210606399408206, 0.19223177100673028, 2.946018466900301, 1.0233272068393684, -0.008867567968745419]
+    [0.12054659833862652, 0.5287865839067847, 0.22462264096441512, 0.9718915055124021, 2.974158985078232, -0.06666407249521322]
 ]
 orientation_const2 = waypoints2[0][3:]
 
@@ -338,15 +333,19 @@ state = con.receive()
 time.sleep(0.5)  # Ensure the robot has time to receive and process the movement
 
 print("-------Executing moveJ -----------\n")
-print("-------Executing moveJ -----------\n")
-
+kappa = compute_curvature(theta_l, length_c)
+volume_cath = volume_calculator_cyclinder((s_c/2), length_c_m)
+volume_mag = volume_calculator_cyclinder((h_a/2), d_a)
+x_c, y_c = compute_center_of_catheter(length_c_m, kappa, theta_l)
+p_hat, p_norm1, y_p, x_p = compute_unit_position_vector(x_c, y_c, d, h)
+alpha_star2 = compute_angle(EI, 30, length_c, x_p, y_p, x_basis, y_basis, p_norm1)
 watchdog.input_int_register_0 = 5
 # Read the actual joint positions before modification
 actual_position = state.actual_q
 print("Actual joint position before moveJ:", actual_position)
 
 # Compute rotation and modify wrist joint 3 (joint index 5)
-rotation_angle_radians = -alpha_star # Example: adding 100 degrees
+rotation_angle_radians = -alpha_star2 # Example: adding 100 degrees
 position2 = actual_position[:]  # Copy current joint states
 position2 = [float(joint) for joint in actual_position]  # Convert to float
 position2[5] += rotation_angle_radians  # Apply rotation
