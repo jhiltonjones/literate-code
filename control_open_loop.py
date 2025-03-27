@@ -8,13 +8,23 @@ import matplotlib.pyplot as plt
 from trajectory_planner_line import PathPlanTranslation 
 from rotation_matrix import T, transform_point
 from bfgs_minimise import alpha_star, alpha_star_deg, compute_angle, length_c, x_p, y_p, p_norm1
-from constants import d, h, theta_l, EI, x_basis, y_basis
+from constants import d, h, theta_l, theta_l2, EI, x_basis, y_basis
 from PID_control import PIDController
 from image_capture import capture_image
 from bending_calculation import calculate_bending_angle
 import os
+import threading
+from talk_arduino import arduino_control, distance_arduino
+
+finished = False
+translate = False
 plot = True
 
+
+def send_arduino_command(command):
+    arduino_thread = threading.Thread(target=arduino_control, args=(command,))
+    arduino_thread.start()
+    return arduino_thread
 log_dir = "/home/jack/literate-code/"
 os.makedirs(log_dir, exist_ok=True)
 log_file_path = os.path.join(log_dir, "steering_angles_log.txt")
@@ -40,6 +50,14 @@ def list_to_setp(setp, lst, offset=0):
     for i in range(6):
         setp.__dict__[f"input_double_register_{i + offset}"] = lst[i]
     return setp
+
+distance = 80
+travel = str(distance_arduino(distance))
+if translate == True:
+    # while finished is not True:
+    arduino_thread = send_arduino_command(f'REV {travel}')
+    finished = True
+finished = False
 
 # ------------- Robot Communication Setup -----------------
 ROBOT_HOST = '192.168.56.101'
@@ -91,7 +109,7 @@ transformed_points = transform_point(T, d, h)
 x_robotic_arm = transformed_points[0]
 y_robotic_arm = transformed_points[1]
 
-start_point = [-1.3657305876361292, -1.326026366358139, 2.4396541754352015, 3.6122347551533203, -1.5614846388446253, 3.5069069862365723]
+start_point = [-2.279425923024313, -1.731661935845846, 2.610805336629049, 3.8676439958759765, -1.5944564978228968, 3.068880319595337]
 
 waypoints = [
     [-2.7217212359057825, -1.2940319341472168, 1.286574665700094, -1.5805064640440882, -1.5797279516803187, 2.6362221240997314],
@@ -129,11 +147,12 @@ while True:
 print("-------Executing moveJ start -----------\n")
 
 
-
 pid = PIDController(Kp=0.5, Ki=0.1, Kd=0.05, dt=0.1)
 
 
-max_attempts = 5
+max_attempts = 6
+demos = 2
+j = 0
 # rotation_step = 0.05 
 vessel_branch_target_angle = theta_l
 
@@ -152,11 +171,13 @@ while True:
     if not state.output_bit_registers0_to_31:
         print('Start completed, proceeding to feedback check\n')
         break
-
+time.sleep(1.5)
 watchdog.input_int_register_0 = 2
 con.send(watchdog)
 state = con.receive()
 actual_position = state.actual_q
+alpha_star = compute_angle(EI, theta_l, length_c, x_p, y_p, x_basis, y_basis, p_norm1)
+alpha_star_deg = np.rad2deg(alpha_star)
 print(f"Initial move: Applying rotation angle of {alpha_star}")
 position = [float(joint) for joint in actual_position] 
 position[5] += alpha_star 
@@ -174,82 +195,6 @@ while True:
         print('MoveJ completed, proceeding to feedback check\n')
         break
 
-watchdog.input_int_register_0 = 3
-con.send(watchdog) 
-for attempt in range(max_attempts):
-    print(f"Iteration {attempt + 1}")
-    
-    print("Checking feedback...")
-    state = con.receive()
-
-    # catheter_tip_position = np.random.uniform(44.8, 45.2) 
-    real_image = capture_image()
-
-    if theta_l >0:
-        scaler = 1
-    else:
-        scaler = -1
-    catheter_tip_position = np.deg2rad(scaler * calculate_bending_angle(real_image, plot))
- 
-    print("Desired angle is: ", np.rad2deg(vessel_branch_target_angle))
-    print("Actual angle is: ",np.rad2deg(catheter_tip_position))
-    log_steering_angles(np.rad2deg(vessel_branch_target_angle), np.rad2deg(catheter_tip_position))
-
-    position_error = catheter_tip_position - vessel_branch_target_angle
-    print(f"Catheter Tip Position: {catheter_tip_position}, Position Error: {position_error}")
-
-    
-    if abs(position_error) >= 0.03: 
-        rotation_adjustment = pid.update(position_error)
-        print(f"PID Rotation Adjustment: {rotation_adjustment}")
-
- 
-        state = con.receive()
-        actual_position = state.actual_q
-        position = [float(joint) for joint in actual_position]  
-        position[5] -= rotation_adjustment 
-        # position[5] += 0.1
-
-        print(f"Adjusting magnet based on PID: {position}")
-        list_to_setp(setp, position, offset=6)
-        con.send(setp)
-        time.sleep(0.5)  
-        con.send(watchdog)
-
-        while True:
-            # print('Waiting for PID-adjusted moveJ() to finish...')
-            state = con.receive()
-            con.send(watchdog)
-            if not state.output_bit_registers0_to_31:
-                print('PID-adjusted MoveJ completed.\n')
-                break
-    else:
-        print("Error is minimal. No further adjustments needed.")
-        state = con.receive()
-        break
-
-state = con.receive()
-time.sleep(0.5) 
-
-watchdog.input_int_register_0 = 4
-con.send(watchdog)
-# time.sleep(0.5) 
-if reset == True:
-    print("Completing rotation reset")
-    list_to_setp(setp, start_point, offset=6)
-    con.send(setp)
-    # time.sleep(0.5)  
-    con.send(watchdog)
-    
-    # con.receive()
-    # time.sleep(0.5)
-    # con.send(watchdog)
-    while True:
-        con.receive()
-        con.send(watchdog)
-        if not state.output_bit_registers0_to_31:
-            break 
-
 print("Final movement completed.")
 print('--------------------')
 print("Actual joint position after moveJ:", state.actual_q)
@@ -259,11 +204,15 @@ print("With a rotation of: ", alpha_star_deg)
 print("With a steering angle of: ", np.rad2deg(theta_l))
 
 
-watchdog.input_int_register_0 = 5
+watchdog.input_int_register_0 = 3
 con.send(watchdog)
 time.sleep(1.5) 
 con.send_pause()
 con.disconnect()
 print("Disconnected")
-time.sleep(1.5)
-capture_image()
+time.sleep(8)
+if translate is True:
+    while finished is not True:
+        travel = str(distance_arduino(distance))
+        arduino_thread = send_arduino_command(f'ON {travel}')
+        finished = True

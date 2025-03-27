@@ -11,10 +11,11 @@ def capture_image():
     try:
         camera.StartGrabbing()
         
-        grab_result = camera.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
+        grab_result = camera.RetrieveResult(1000, pylon.TimeoutHandling_ThrowException)
 
         if grab_result.GrabSucceeded():
             img = grab_result.Array
+            print("Success")
 
             if len(img.shape) == 2:
                 img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
@@ -38,6 +39,3 @@ def capture_image():
 if __name__== "__main__":
     image_path = capture_image()
     print(f"Captured image is stored at: {image_path}")
-
-
-
