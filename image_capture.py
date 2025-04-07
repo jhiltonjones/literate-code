@@ -2,6 +2,7 @@ from pypylon import pylon
 import cv2
 import numpy as np
 import os
+import time
 
 def capture_image():
     camera = pylon.InstantCamera(pylon.TlFactory.GetInstance().CreateFirstDevice())
@@ -9,6 +10,7 @@ def capture_image():
     camera.Open()
 
     try:
+        time.sleep(0)
         camera.StartGrabbing()
         
         grab_result = camera.RetrieveResult(1000, pylon.TimeoutHandling_ThrowException)
@@ -20,7 +22,7 @@ def capture_image():
             if len(img.shape) == 2:
                 img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
 
-            image_filename = "captured_image.jpg"
+            image_filename = "captured_image0.jpg"
             image_path = os.path.abspath(image_filename)
 
             cv2.imwrite(image_path, img)

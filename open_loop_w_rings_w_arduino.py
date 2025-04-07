@@ -206,7 +206,9 @@ distance = 55
 travel = str(distance_arduino(distance))
 if translate == True:
     arduino_thread = send_arduino_command(f'REV {travel}')
+
 watchdog.input_int_register_0 = 3
+con.send(watchdog)
 # Read the actual joint positions before modification
 actual_position = state.actual_q
 print("Actual joint position before moveJ:", actual_position)
@@ -227,7 +229,6 @@ time.sleep(0.5)  # Allow time for movement
 
 # Send Initial Pose
 
-con.send(watchdog)
 # list_to_setp(setp, position, offset=6)  # Store position in registers 6-11
 # con.send(setp)
 

@@ -37,4 +37,4 @@ def distance_arduino(distance):
 if __name__ == '__main__':
     distance = 25
     travel = str(distance_arduino(distance))
-    arduino_control(f'ON {travel}')  
+    arduino_control(f'REV {travel}')  
