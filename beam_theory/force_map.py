@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 # Physical constants and magnet parameters
 mu0 = 4 * np.pi * 1e-7  # Vacuum permeability (T·m/A)
-Br = 1.31               # Remanence (T)
+Br = 1.45               # Remanence (T)
 r = 0.04               # EPM radius (m)
 h = 0.09                # EPM height (m)
 r_i = 0.0005            # IPM radius (m)

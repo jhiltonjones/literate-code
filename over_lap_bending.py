@@ -4,16 +4,16 @@ import matplotlib.pyplot as plt
 import cv2
 # Load all images
 image_paths = [
-    "/home/jack/literate-code/captured_image0.jpg",
-    "/home/jack/literate-code/captured_image10.jpg",
-    "/home/jack/literate-code/captured_image20.jpg",
-    "/home/jack/literate-code/captured_image30.jpg",
-    "/home/jack/literate-code/captured_image40.jpg",
-    "/home/jack/literate-code/captured_image50.jpg",
-    "/home/jack/literate-code/captured_image60.jpg",
-    "/home/jack/literate-code/captured_image70.jpg",
-    "/home/jack/literate-code/captured_image80.jpg",
-    "/home/jack/literate-code/captured_image90.jpg"
+    "/Users/jackhilton-jones/literate-code/figures/captured_image0.jpg",
+    "/Users/jackhilton-jones/literate-code/figures/captured_image10.jpg",
+    "/Users/jackhilton-jones/literate-code/figures/captured_image20.jpg",
+    "/Users/jackhilton-jones/literate-code/figures/captured_image30.jpg",
+    "/Users/jackhilton-jones/literate-code/figures/captured_image40.jpg",
+    "/Users/jackhilton-jones/literate-code/figures/captured_image50.jpg",
+    "/Users/jackhilton-jones/literate-code/figures/captured_image60.jpg",
+    "/Users/jackhilton-jones/literate-code/figures/captured_image70.jpg",
+    "/Users/jackhilton-jones/literate-code/figures/captured_image80.jpg",
+    "/Users/jackhilton-jones/literate-code/figures/captured_image90.jpg"
 ]
 
 # Convert images to grayscale arrays and stack them
@@ -60,7 +60,6 @@ enhanced_dark_region_uint8 = np.clip(enhanced_dark_region, 0, 255).astype(np.uin
 # Show the result
 plt.imshow(enhanced_dark_region_uint8, cmap='gray')
 plt.axis('off')
-plt.title("Regionally Enhanced Dark Pixels (Fixed Mask)")
 plt.show()
 
 

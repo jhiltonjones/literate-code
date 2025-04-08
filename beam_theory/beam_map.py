@@ -3,15 +3,15 @@ import numpy as np
 # Physical properties
 Ev = 3e6               # Young's modulus (Pa)
 Iv = 4.1e-13           # Moment of inertia (m^4)
-L = 0.08               # Total catheter length (m)
+L = 0.05               # Total catheter length (m)
 
 # Magnet parameters
 mu0 = 4 * np.pi * 1e-7  # Vacuum permeability
-Br = 1.31               # Remanence
+Br = 1.45               # Remanence
 r = 0.04                # EPM radius (m)
 h = 0.09                # EPM height (m)
 r_i = 0.0005            # IPM radius (m)
-h_i = 0.01             # IPM height (m)
+h_i = 0.005            # IPM height (m)
 
 V_E = np.pi * r**2 * h
 V_I = np.pi * r_i**2 * h_i
@@ -21,7 +21,7 @@ m_I = np.array([m_I_mag, 0, 0])
 m_I_hat = m_I / np.linalg.norm(m_I)
 
 # EPM position
-pos_epm = np.array([0, 0.35, 0])
+pos_epm = np.array([0, 0.25, 0])
 p = pos_epm
 p_norm = np.linalg.norm(p)
 p_hat = p / p_norm
@@ -62,7 +62,7 @@ plt.tight_layout()
 plt.show()
 # Create a grid of x and y positions for the EPM
 x_vals = np.linspace(-0.2, 0.2, 50)
-y_vals = np.linspace(0.3, 0.4, 50)  # Avoid 0 to prevent division by zero
+y_vals = np.linspace(0.22, 0.4, 50)  # Avoid 0 to prevent division by zero
 theta_c_hat_grid = np.zeros((len(y_vals), len(x_vals)))
 
 # EPM dipole fixed at 0 degrees (aligned along +y)
@@ -103,7 +103,7 @@ surf = ax.plot_surface(X, Y, theta_c_hat_grid_capped, cmap='viridis')
 ax.set_xlabel('EPM X Position (m)')
 ax.set_ylabel('EPM Y Position (m)')
 ax.set_zlabel('Estimated Bending Angle θ̂_c (deg)')
-ax.set_title('Bending Angle vs. EPM X and Y Position (Capped at 140°)')
+ax.set_title('Bending Angle vs. EPM X and Y Position')
 plt.tight_layout()
 plt.show()
 
