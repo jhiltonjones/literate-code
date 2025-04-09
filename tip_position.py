@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Load image
-image_path = "/home/jack/literate-code/captured_image.jpg"
+image_path = "/home/jack/literate-code/captured_image1.jpg"
 image = cv2.imread(image_path)
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 

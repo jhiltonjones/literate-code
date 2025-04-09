@@ -22,7 +22,7 @@ def capture_image():
             if len(img.shape) == 2:
                 img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
 
-            image_filename = "captured_image0.jpg"
+            image_filename = "captured_image1.jpg"
             image_path = os.path.abspath(image_filename)
 
             cv2.imwrite(image_path, img)

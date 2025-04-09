@@ -4,7 +4,7 @@ import numpy as np
 from scipy.interpolate import splprep, splev
 
 # Step 1: Load image
-image_path = 'captured_image.jpg'  # <- Replace with your path if needed
+image_path = 'captured_image1.jpg'  # <- Replace with your path if needed
 image = cv2.imread(image_path)
 image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
