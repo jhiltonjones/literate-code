@@ -3,10 +3,21 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import splprep, splev
 from image_capture import capture_image
-def below_or_above(path, graph):
+def below_or_above2(path, graph):
 # Load and convert to grayscale
 # image_path = "/home/jack/literate-code/captured_image.jpg"
-
+    # Scale conversion
+        # --- NEW STEP: Compute angles between consecutive segments ---
+    def compute_angle(v1, v2):
+        """Returns the angle in degrees between vectors 'v1' and 'v2'"""
+        unit_v1 = v1 / np.linalg.norm(v1)
+        unit_v2 = v2 / np.linalg.norm(v2)
+        dot_prod = np.clip(np.dot(unit_v1, unit_v2), -1.0, 1.0)  # clip to avoid numerical issues
+        angle_rad = np.arccos(dot_prod)
+        angle_deg = np.degrees(angle_rad)
+        return angle_deg
+    scale_pixels_per_mm = 9.55
+    mm_per_pixel = 1 / scale_pixels_per_mm
     image_path = path
 
     image = cv2.imread(image_path)
@@ -45,21 +56,44 @@ def below_or_above(path, graph):
     else:
         rod_tip_filtered = (base_x, base_y)
     rod_tip_x, rod_tip_y = rod_tip_filtered
+    # --- Estimate catheter direction near tip using PCA on darkest pixels ---
+
+    # Region around tip to analyze
+    roi_size = 20  # pixels
+    x0, y0 = rod_tip_filtered
+    x0, y0 = int(x0), int(y0)
+    roi = gray[max(0, y0 - roi_size):y0 + roi_size, max(0, x0 - roi_size):x0 + roi_size]
+
+    # Find coordinates of dark pixels in ROI
+    dark_thresh = 70
+    ys_local, xs_local = np.where(roi < dark_thresh)
+
+    # Translate to global coordinates
+    xs_global = xs_local + max(0, x0 - roi_size)
+    ys_global = ys_local + max(0, y0 - roi_size)
+    points = np.stack((xs_global, ys_global), axis=1)
+
+    # Compute PCA for direction
+    if len(points) >= 2:
+        mean = np.mean(points, axis=0)
+        cov = np.cov(points - mean, rowvar=False)
+        eigvals, eigvecs = np.linalg.eig(cov)
+        catheter_dir = eigvecs[:, np.argmax(eigvals)]  # Principal axis
+    else:
+        catheter_dir = np.array([1, 0])  # fallback
 
     # --- STEP 2: Fit spline through given ring points ---
     ring_coords = np.array([
-    (1221.7, 414.3),
-    (1113.1, 414.3),
-    (1017.7, 413.0),
-    (934.2, 414.3),
-    (846.8, 415.6),
-    (789.8, 417.0),
-    (758.0, 434.2),
-    (705.0, 463.3),
-    (645.4, 509.7),
-    (559.3, 581.2),
-    (449.3, 672.7),
-    (373.8, 734.9)
+    (1216.6, 395.0),
+    (1163.9, 392.0),
+    (1088.6, 390.5),
+    (1013.4, 385.9),
+    (945.6, 381.4),
+    (906.4, 363.3),
+    (856.8, 315.2),
+    (801.0, 253.4),
+    (742.3, 191.7),
+    (647.5, 96.8)
     ])
     x_rings, y_rings = ring_coords[:, 0], ring_coords[:, 1]
 
@@ -74,6 +108,59 @@ def below_or_above(path, graph):
     distances = np.linalg.norm(spline_points - tip_point, axis=1)
     closest_index = np.argmin(distances)
     closest_spline_x, closest_spline_y = spline_points[closest_index]
+    # Compute unit tangent vector at closest point
+    if 0 < closest_index < len(spline_points) - 1:
+        prev_point = spline_points[closest_index - 1]
+        next_point = spline_points[closest_index + 1]
+        tangent_vec = next_point - prev_point
+    else:
+        tangent_vec = np.array([1, 0])  # fallback
+
+    unit_tangent = tangent_vec / np.linalg.norm(tangent_vec)
+
+    # --- Compute arc length along spline ---
+    spline_coords = np.array([x_spline, y_spline]).T
+    deltas = np.diff(spline_coords, axis=0)
+    segment_lengths = np.linalg.norm(deltas, axis=1)
+    arc_lengths = np.insert(np.cumsum(segment_lengths), 0, 0)
+
+    # Find arc length at closest point
+    closest_arc_length = arc_lengths[closest_index]
+    target_arc_length = closest_arc_length + 10 * scale_pixels_per_mm
+
+    # Find new index on spline at that arc length
+    if target_arc_length >= arc_lengths[-1]:
+        print("Warning: 10mm ahead is beyond end of spline.")
+        new_index = len(spline_coords) - 1
+    else:
+        new_index = np.searchsorted(arc_lengths, target_arc_length)
+
+    target_point = spline_coords[new_index]
+
+
+    # Draw target point on image
+    cv2.circle(image_rgb, (int(target_point[0]), int(target_point[1])), 6, (0, 0, 255), -1)
+    cv2.putText(image_rgb, "10mm along spline", (int(target_point[0]) + 10, int(target_point[1])),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+
+    # Get local tangent at the *new* point (target_point)
+    if 0 < new_index < len(spline_coords) - 1:
+        prev = spline_coords[new_index - 1]
+        nxt = spline_coords[new_index + 1]
+        tangent_new = nxt - prev
+    else:
+        tangent_new = np.array([1, 0])  # fallback
+
+    unit_tangent_new = tangent_new / np.linalg.norm(tangent_new)
+
+    # Compute angle between catheter direction and spline tangent
+    alignment_angle = compute_angle(catheter_dir, unit_tangent_new)
+    alignment_angle = min(alignment_angle, 180 - alignment_angle)
+    print(f"Alignment angle between catheter and spline direction: {alignment_angle:.2f} degrees")
+
+
+
+
     # Compute Euclidean distance between rod tip and closest spline point
     pixel_distance = np.linalg.norm(np.array(rod_tip_filtered) - np.array([closest_spline_x, closest_spline_y]))
     desired_point = np.array([closest_spline_x, closest_spline_y])
@@ -124,6 +211,10 @@ def below_or_above(path, graph):
     # Draw result
     cv2.putText(image_rgb, relation_text, (50, 50),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 200, 255), 2)
+    pt1 = (int(mean[0]), int(mean[1]))
+    pt2 = (int(mean[0] + 30 * catheter_dir[0]), int(mean[1] + 30 * catheter_dir[1]))
+    cv2.arrowedLine(image_rgb, pt1, pt2, (0, 0, 255), 2)
+
     # --- NEW STEP: Split spline into 50mm increments ---
     scale_pixels_per_mm = 9.55
     distance_mm = 10
@@ -151,15 +242,7 @@ def below_or_above(path, graph):
         cv2.circle(image_rgb, (int(mx), int(my)), 6, (255, 255, 0), -1)
         cv2.putText(image_rgb, f"{i * distance_mm}mm", (int(mx) + 5, int(my) + 5),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-    # --- NEW STEP: Compute angles between consecutive segments ---
-    def compute_angle(v1, v2):
-        """Returns the angle in degrees between vectors 'v1' and 'v2'"""
-        unit_v1 = v1 / np.linalg.norm(v1)
-        unit_v2 = v2 / np.linalg.norm(v2)
-        dot_prod = np.clip(np.dot(unit_v1, unit_v2), -1.0, 1.0)  # clip to avoid numerical issues
-        angle_rad = np.arccos(dot_prod)
-        angle_deg = np.degrees(angle_rad)
-        return angle_deg
+
 
     # Compute and annotate angles between segments
     for i in range(1, len(milestone_points) - 1):
@@ -188,11 +271,11 @@ def below_or_above(path, graph):
     # print(f"Rod tip detected at: {rod_tip_filtered} with intensity: {min_val}")
     print(relation_text)
     
-    return tip, rod_tip_filtered, signed_distance_mm, desired_point
+    return tip, rod_tip_filtered, signed_distance_mm, desired_point, alignment_angle
 if __name__ == "__main__":
     image = capture_image()
-    tip, rod_pos, signed_distance_mm, desired_point = below_or_above(image, True)
+    tip, rod_pos, signed_distance_mm, desired_point, alignment_angle = below_or_above2(image, True)
     if tip == "Below":
         print("WHOO")
     print(rod_pos)
-    print(signed_distance_mm, desired_point)
+    print(signed_distance_mm, desired_point, alignment_angle)
