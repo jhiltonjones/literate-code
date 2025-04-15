@@ -84,16 +84,18 @@ def below_or_above2(path, graph):
 
     # --- STEP 2: Fit spline through given ring points ---
     ring_coords = np.array([
-    (1216.6, 395.0),
-    (1163.9, 392.0),
-    (1088.6, 390.5),
-    (1013.4, 385.9),
-    (945.6, 381.4),
-    (906.4, 363.3),
-    (856.8, 315.2),
-    (801.0, 253.4),
-    (742.3, 191.7),
-    (647.5, 96.8)
+    (1228.4, 418.2),
+    (1176.3, 416.7),
+    (1110.8, 410.8),
+    (1015.6, 406.3),
+    (915.9, 407.8),
+    (856.4, 410.8),
+    (792.5, 422.7),
+    (750.8, 445.0),
+    (680.9, 491.1),
+    (591.6, 562.5),
+    (491.9, 644.4),
+    (389.3, 721.7)
     ])
     x_rings, y_rings = ring_coords[:, 0], ring_coords[:, 1]
 
@@ -183,6 +185,7 @@ def below_or_above2(path, graph):
     elif rod_tip_y < closest_spline_y:
         relation_text = "Rod tip is ABOVE the spline"
         tip = "Above"
+        alignment_angle = -1*alignment_angle
     else:
         relation_text = "Rod tip is BELOW the spline"
         tip = "Below"

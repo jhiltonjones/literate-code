@@ -51,8 +51,8 @@ def inverse_pos_calc(theta_c_desired, initial_guess):
     deg2rad = lambda x: x * np.pi / 180
 
     alpha = 0.1
-    tol = 1e-4
-    max_iters = 80
+    tol = 1e-3
+    max_iters = 100
     e_log = np.zeros(max_iters)
 
     # theta_c_desired = deg2rad(64)
@@ -96,7 +96,7 @@ def inverse_pos_calc(theta_c_desired, initial_guess):
 
         x_var[0] = np.clip(x_var[0], -0.05, 0.05)
         x_var[1] = np.clip(x_var[1], 0.17, 0.25)
-        x_var[2] = np.clip(x_var[2], 0, 90)
+        x_var[2] = np.clip(x_var[2], 0, 180)
 
     theta_deg_out = theta_c_desired * 180 / np.pi
     theta_c_desired_deg = np.rad2deg(theta_c_desired)
@@ -112,8 +112,8 @@ def inverse_pos_calc(theta_c_desired, initial_guess):
     return theta_deg_out, theta_c_desired, x_var[0], x_var[1], x_var[2]
 
 if __name__ == "__main__":
-    x_var = np.array([0.01, 0.18, 45.0])
-    angle = np.deg2rad(90)
+    x_var = np.array([0, 0.18, 100.0])
+    angle = np.deg2rad(-24)
     theta_deg_out, theta_c_desired, x_var[0], x_var[1], x_var[2] = inverse_pos_calc(angle, x_var)
     print(f'Degrees: {x_var[2]} Radians: {np.deg2rad(x_var[2])}')
     print(f'x = {x_var[0]:.4f} m\ny = {x_var[1]:.4f}')

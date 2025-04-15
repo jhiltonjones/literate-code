@@ -9,8 +9,8 @@ from tip_angle_predictive import below_or_above2
 
 def joint_rad_to_custom_degrees(theta_rad):
     # Known calibration points
-    rad_0_deg = -1.0692914167987269
-    rad_90_deg = 0.8635578155517578
+    rad_0_deg = -2.536228958760397
+    rad_90_deg = -1.1406424681292933
 
     # Solve for linear mapping: degrees = m * theta + b
     m = (90 - 0) / (rad_90_deg - rad_0_deg)
@@ -20,8 +20,8 @@ def joint_rad_to_custom_degrees(theta_rad):
     return custom_degrees
 def custom_degrees_to_joint_rad(custom_deg):
     # Known calibration points
-    rad_0_deg = -1.0692914167987269
-    rad_90_deg = 0.8635578155517578
+    rad_0_deg = -2.536228958760397
+    rad_90_deg = -1.1406424681292933
 
     # Linear mapping parameters
     m = (90 - 0) / (rad_90_deg - rad_0_deg)
@@ -81,7 +81,7 @@ def position_mapping(rod_pos, robot_x, robot_y, rotation, des_angle):
     deg = joint_rad_to_custom_degrees(rotation)
 
     x_var = np.array([diff_x, diff_y, deg])
-    des_angle = np.deg2rad(25)
+    # des_angle = np.deg2rad(25)
     theta_deg_out, theta_c_desired, x_calc_pos, y_calc_pos, rotation_calc2 = inverse_pos_calc(des_angle, x_var)
     print(f'Degrees: {rotation_calc2} Radians: {theta_c_desired}')
     final_rotation = custom_degrees_to_joint_rad(rotation_calc2)
@@ -97,7 +97,7 @@ def position_mapping(rod_pos, robot_x, robot_y, rotation, des_angle):
 if __name__ == "__main__":
     image_path = capture_image()
     tip, rod_pos, error, desired_point, alignement = below_or_above2(image_path, False)
-    x, y, deg_out = position_mapping(rod_pos, 0.23602152160567344, 0.3550124753628118, -0.7620802521705627, alignement)
+    x, y, deg_out = position_mapping(rod_pos, 0.23602152160567344, 0.3550124753628118, 0.32630395889282227, -10)
     print(f"Robot Frame Reconstructed: x = {x:.3f}, y = {y:.3f}, Rotation = {deg_out}")
     print(np.rad2deg(deg_out))
 
