@@ -18,6 +18,7 @@ import os
 from tip_w_spline import below_or_above
 import threading
 from talk_arduino import arduino_control, distance_arduino
+from camera_to_robot_frame import pixel_to_robot_frame
 plot = False
 # time.sleep(3)
 # log_dir = "/home/jack/literate-code/"
@@ -32,16 +33,36 @@ plot = False
 #         file.write(log_entry)
 
 #     print(f"Logged: {log_entry.strip()}")
-translate =False
+translate =True
 def send_arduino_command(command):
     arduino_thread = threading.Thread(target=arduino_control, args=(command,))
     arduino_thread.start()
     return arduino_thread
 
-distance = 150
+distance = 90
 travel = str(distance_arduino(distance))
 if translate == True:
     arduino_thread = send_arduino_command(f'REV {travel}')
+
+def get_inverse(con, setp, position_inv):
+    # Set registers
+    list_to_setp(setp, position_inv, offset=12)
+    con.send(setp)
+
+    time.sleep(0.1)
+
+    # Read back the joint values
+    state = con.receive()
+    joints = [
+        getattr(state, 'output_double_register_12'),
+        getattr(state, 'output_double_register_13'),
+        getattr(state, 'output_double_register_14'),
+        getattr(state, 'output_double_register_15'),
+        getattr(state, 'output_double_register_16'),
+        getattr(state, 'output_double_register_17'),
+    ]
+    return joints
+
 
 def setp_to_list(setp, offset=0):
     return [setp.__dict__[f"input_double_register_{i + offset}"] for i in range(6)]
@@ -95,19 +116,13 @@ con.send(setp)
 con.send(watchdog)
 
 
-# setp.input_double_register_0 = 0
-# setp.input_double_register_1 = 0
-# setp.input_double_register_2 = 0
-# setp.input_double_register_3 = 0
-# setp.input_double_register_4 = 0
-setp.input_double_register_5 = 0
-setp.input_double_register_6 = 0
-setp.input_double_register_7 = 0
-setp.input_double_register_8 = 0
-setp.input_double_register_9 = 0
-setp.input_double_register_10 = 0
-setp.input_double_register_11 = 0
-# setp.input_bit_registers0_to_31 = 0
+setp.input_double_register_12 = 0
+setp.input_double_register_13 = 0
+setp.input_double_register_14 = 0
+setp.input_double_register_15 = 0
+setp.input_double_register_16 = 0
+setp.input_double_register_17 = 0
+setp.input_bit_registers0_to_31 = 0
 # watchdog.input_int_register_0 = 0
 
 # start data synchronization
@@ -119,9 +134,8 @@ transformed_points = transform_point(T, d, h)
 x_robotic_arm = transformed_points[0]
 y_robotic_arm = transformed_points[1]
 
-# start_point = [-2.2383063475238245, -1.846382280389303, 2.72556716600527, 3.8191911417194824, -1.6096790472613733, 0.7579470872879028]
-start_point = [-1.8534258047686976, -1.3017190855792542, 1.8778494040118616, -1.912570138970846, 4.626976013183594, 0.8060479164123535]
-start_point2 = [0.1755076541175867, 0.3408329330104245, 0.18977785950394413, 3.0933896777059267, -0.362756325578998, 0.055571593481881676]
+start_point = [0.1755076541175867, 0.3408329330104245, 0.18977785950394413, 3.0933896777059267, -0.362756325578998, 0.055571593481881676]
+start_point2 = [-2.5031779448138636, -1.7064396343626917, 2.711315933858053, 3.699288530940674, -1.611321274434225, -0.6948040167437952]
 
 waypoints = [
     [-2.2383063475238245, -1.846382280389303, 2.72556716600527, 3.8191911417194824, -1.6096790472613733, 0.7579470872879028],
@@ -137,8 +151,9 @@ waypoints = [
     # [0.01561346376380156, 0.8392848297605487, 0.3870643751382633, -3.1129835149573597, -0.39044182826995194, -0.02877771799883438] 
 ]
 
-start_point_list = setp_to_list(setp, offset=6)
+start_point_list = setp_to_list(setp, offset=0)
 position_list = setp_to_list(setp, offset=6)  
+inverse_list = setp_to_list(setp, offset=12)
 reset = True
 
 while True:
@@ -150,16 +165,20 @@ while True:
         break
 print("-------Executing moveJ start -----------\n")
 
-max_attempts = 9
-
-
 print("-------Executing moveJ -----------\n")
 
 watchdog.input_int_register_0 = 1
 con.send(watchdog)
-list_to_setp(setp, start_point, offset=6)
+# list_to_setp(setp, start_point, offset=12)
+list_to_setp(setp, start_point, offset=12)
+list_to_setp(setp, start_point2, offset=6)
+
 con.send(setp)
 time.sleep(0.5)
+
+# list_to_setp(setp, start_point2, offset=6)
+# con.send(setp)
+
 
 while True:
     print(f'Waiting for moveJ() to finish start...')
@@ -172,50 +191,59 @@ while True:
 watchdog.input_int_register_0 = 2
 con.send(watchdog)
 state = con.receive()
-actual_position = state.actual_q
-position = [float(joint) for joint in actual_position] 
-image_path = capture_image()
-tip, rod_pos = below_or_above(image_path, False)
-rotation_step = 0.35
-adjustment = True
-attempts = 0
-i = 0
-while adjustment and attempts < max_attempts:
-    # time.sleep(1)
-    state = con.receive()
-    actual_position = state.actual_q
-    position = [float(joint) for joint in actual_position]
 
+
+# Initial rotation offset in joint space
+joint6_angle = None
+rotation_step = 0.2
+attempts = 0
+max_attempts = 15
+
+while attempts < max_attempts:
     image_path = capture_image()
     tip, rod_pos = below_or_above(image_path, False)
+    robotposx, robotposy = pixel_to_robot_frame(rod_pos[0], rod_pos[1])
+    robotposx += 0.25
+
+    # Keep a fixed pose orientation
+    position = [robotposx, robotposy, 0.18977785950394413,
+                3.0933896777059267, -0.362756325578998, 0.055571593481881676]
+
+    list_to_setp(setp, position, offset=12)
+    joints_off = get_inverse(con, setp, position)
+
+    if joint6_angle is None:
+        # Only set once from first IK
+        joint6_angle = joints_off[5]
+
     if tip == "Below":
-        position[5] -= rotation_step
-        
+        joint6_angle -= rotation_step
+        print("Below")
     elif tip == "Above":
-        position[5] += rotation_step
+        joint6_angle += rotation_step
+        print("Above")
     else:
         print("Rod tip aligned with spline. No further adjustment.")
-        adjustment = False
-    attempts += 1
-    position_next = waypoints[i]
-    position_next[5] = position[5]
+        break
 
+    # Apply modified joint6
+    joints_off[5] = joint6_angle
 
-    print(f"Moving magnet to position: {position}")
-    list_to_setp(setp, start_point, offset=6)
+    print(f"Moving magnet to position (joints): {joints_off}")
+    list_to_setp(setp, joints_off, offset=6)
     con.send(setp)
-    time.sleep(0.5) 
     con.send(watchdog)
 
     while True:
-        print(f'Waiting for moveJ() to finish...')
         state = con.receive()
         con.send(watchdog)
         if not state.output_bit_registers0_to_31:
-            print('MoveJ completed, proceeding to feedback check\n')
+            print('MoveJ completed, proceeding to next adjustment\n')
             break
-    if i < 4:
-        i +=1
+
+    attempts += 1
+
+
 
 watchdog.input_int_register_0 = 3
 con.send(watchdog) 
@@ -232,9 +260,7 @@ con.send_pause()
 con.disconnect()
 print("Disconnected")
 image_final = capture_image()
-below_or_above(image_final)
 time.sleep(3)
-below_or_above(image_final)
 travel = str(distance_arduino(0))
 if translate == True:
     arduino_thread = send_arduino_command(f'ON {travel}')
