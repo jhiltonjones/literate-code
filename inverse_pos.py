@@ -10,7 +10,7 @@ def force_from_paper(r_vec, angle_deg):
 
 def force_from_paper_sym(r_vec, angle_deg):
     mu0 = 4 * sp.pi * 1e-7
-    Br = 1.2
+    Br = 1
     r, h = 0.04, 0.06
     r_i, h_i = 0.0005, 0.005
 
@@ -51,8 +51,8 @@ def inverse_pos_calc(theta_c_desired, initial_guess):
     deg2rad = lambda x: x * np.pi / 180
 
     alpha = 0.1
-    tol = 1e-4
-    max_iters = 100000
+    tol = 1e-3
+    max_iters = 100
     e_log = np.zeros(max_iters)
 
     # theta_c_desired = deg2rad(64)
@@ -95,11 +95,12 @@ def inverse_pos_calc(theta_c_desired, initial_guess):
         x_var += alpha * delta_x.flatten()
 
         x_var[0] = np.clip(x_var[0], -0.05, 0.05)
-        x_var[1] = np.clip(x_var[1], 0.14, 0.3)
-        x_var[2] = np.clip(x_var[2], 0, 90)
+        x_var[1] = np.clip(x_var[1], 0.17, 0.25)
+        x_var[2] = np.clip(x_var[2], 0, 180)
 
     theta_deg_out = theta_c_desired * 180 / np.pi
-    print(f'\nFinal magnet pose for θ = {theta_deg_out:.2f} deg:')
+    theta_c_desired_deg = np.rad2deg(theta_c_desired)
+    print(f'\nFinal magnet pose for θ = {theta_c_desired_deg:.2f} deg:')
     print(f'x = {x_var[0]:.4f} m\ny = {x_var[1]:.4f} m\nangle = {x_var[2]:.2f} deg')
 
     plt.plot(e_log[:iter])
@@ -108,9 +109,11 @@ def inverse_pos_calc(theta_c_desired, initial_guess):
     plt.title('Convergence of Bending Angle')
     plt.grid(True)
     # plt.show()
-    return theta_deg_out, theta_c_desired
+    return theta_deg_out, theta_c_desired, x_var[0], x_var[1], x_var[2]
+
 if __name__ == "__main__":
-    x_var = np.array([0.01, 0.18, 45.0])
-    angle = np.deg2rad(25)
-    theta_deg_out, theta_c_desired = inverse_pos_calc(angle, x_var)
-    print(f'Degrees: {theta_deg_out} Radians: {theta_c_desired}')
+    x_var = np.array([0, 0.18, 100.0])
+    angle = np.deg2rad(-24)
+    theta_deg_out, theta_c_desired, x_var[0], x_var[1], x_var[2] = inverse_pos_calc(angle, x_var)
+    print(f'Degrees: {x_var[2]} Radians: {np.deg2rad(x_var[2])}')
+    print(f'x = {x_var[0]:.4f} m\ny = {x_var[1]:.4f}')

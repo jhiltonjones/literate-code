@@ -20,6 +20,8 @@ import threading
 from talk_arduino import arduino_control, distance_arduino
 from camera_to_robot_frame import pixel_to_robot_frame
 from PID_control import PIDController
+from inverse_pos_to_robot import position_mapping
+from tip_angle_predictive import below_or_above2
 plot = False
 # time.sleep(3)
 # log_dir = "/home/jack/literate-code/"
@@ -35,15 +37,14 @@ plot = False
 
 #     print(f"Logged: {log_entry.strip()}")
 translate =True
-max_attempts = 30
-pid = PIDController(Kp=0.04, Ki=0.005, Kd=0.005, dt=0.1)
+max_attempts = 15
 
 def send_arduino_command(command):
     arduino_thread = threading.Thread(target=arduino_control, args=(command,))
     arduino_thread.start()
     return arduino_thread
 
-distance = 75
+distance = 65
 travel = str(distance_arduino(distance))
 if translate == True:
     arduino_thread = send_arduino_command(f'REV {travel}')
@@ -139,7 +140,7 @@ x_robotic_arm = transformed_points[0]
 y_robotic_arm = transformed_points[1]
 
 start_point = [0.1755076541175867, 0.3408329330104245, 0.19284468007579447, -2.0816034260171703, 2.3466373488762486, -0.06945873529326571]
-start_point2 = [-2.5657506624804896, -1.624155660668844, 2.635834042225973, 3.6897169786640625, -1.6107528845416468, 0.7620733380317688]
+start_point2 = [-2.5657506624804896, -1.624155660668844, 2.635834042225973, 3.6897169786640625, -1.6107528845416468, -0.4420250097857874]
 
 waypoints = [
     [-2.2383063475238245, -1.846382280389303, 2.72556716600527, 3.8191911417194824, -1.6096790472613733, 0.7579470872879028],
@@ -211,13 +212,23 @@ while attempts < max_attempts:
             print("Disconnected from robot.")
             break
         con.send(watchdog)
+        state = con.receive()
+        current_position = state.actual_q
+        using_pos = [float(joint) for joint in current_position]  
+        current_tcp_pose = state.actual_TCP_pose
+        using_tcp_pose = [float(joint2) for joint2 in current_tcp_pose] 
         image_path = capture_image()
-        tip, rod_pos, error, desired_point = below_or_above(image_path, False)
+        tip, rod_pos, error, desired_point, alignment_angle = below_or_above2(image_path, False)
         robotposx, robotposy = pixel_to_robot_frame(rod_pos[0], rod_pos[1])
-        robotposx += 0.16
+        print(f'Position of current rotation is {using_pos[5]}')
+        print(f'Position of x is {using_tcp_pose[0]}')
+        print(f'Position of y is {using_tcp_pose[1]}')
+        print(f'Alignment angle is {alignment_angle}')
+        calc_newx, calc_newy, deg_out = position_mapping(rod_pos, using_tcp_pose[0], using_tcp_pose[1], using_pos[5], np.deg2rad(alignment_angle))
+        print(f"Robot Frame Reconstructed: x = {calc_newx:.3f}, y = {calc_newy:.3f}, Rotation = {deg_out}")
 
         # Keep a fixed pose orientation
-        position = [robotposx, robotposy, 0.19284468007579447, -2.1363892341455784, 2.298125170641374, -0.069651168329979]
+        position = [calc_newx, calc_newy, 0.19284468007579447, -2.1363892341455784, 2.298125170641374, -0.069651168329979]
 
         list_to_setp(setp, position, offset=12)
         joints_off = get_inverse(con, setp, position)
@@ -228,10 +239,10 @@ while attempts < max_attempts:
 
 
 
-        rotation_adjustment = pid.update(error)
-        joint6_angle += rotation_adjustment
-        joint6_angle = np.clip(joint6_angle, -1.1307175795184534, 2.2146785259246826)
-        print(f"PID Rotation Adjustment: {rotation_adjustment}")
+   
+        joint6_angle = (deg_out)
+        joint6_angle = np.clip(joint6_angle, -2.536228958760397, 0.7649083137512207)
+
         # if tip == "Below":
         #     joint6_angle -= rotation_step
         #     print("Below")

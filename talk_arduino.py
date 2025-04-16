@@ -37,6 +37,6 @@ def distance_arduino(distance):
     return travel
 
 if __name__ == '__main__':
-    distance = 10
+    distance = 5
     travel = str(distance_arduino(distance))
     arduino_control(f'ON {travel}')  
