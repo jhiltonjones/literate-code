@@ -2,7 +2,7 @@ import cv2
 import matplotlib.pyplot as plt
 
 # Load image
-image_path = 'captured_image1.jpg'
+image_path = '/home/jack/literate-code/focused_image.jpg'
 image = cv2.imread(image_path)
 image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 

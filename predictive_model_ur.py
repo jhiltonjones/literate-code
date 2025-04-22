@@ -22,6 +22,8 @@ from camera_to_robot_frame import pixel_to_robot_frame
 from PID_control import PIDController
 from inverse_pos_to_robot import position_mapping
 from tip_angle_predictive import below_or_above2
+from new_cam import new_capture
+from new_finder2 import detect_rod_tip_darkest_right
 plot = False
 # time.sleep(3)
 # log_dir = "/home/jack/literate-code/"
@@ -36,15 +38,15 @@ plot = False
 #         file.write(log_entry)
 
 #     print(f"Logged: {log_entry.strip()}")
-translate =True
-max_attempts = 15
+translate =False
+max_attempts = 0
 
 def send_arduino_command(command):
     arduino_thread = threading.Thread(target=arduino_control, args=(command,))
     arduino_thread.start()
     return arduino_thread
 
-distance = 65
+distance = 150
 travel = str(distance_arduino(distance))
 if translate == True:
     arduino_thread = send_arduino_command(f'REV {travel}')
@@ -139,8 +141,8 @@ transformed_points = transform_point(T, d, h)
 x_robotic_arm = transformed_points[0]
 y_robotic_arm = transformed_points[1]
 
-start_point = [0.1755076541175867, 0.3408329330104245, 0.19284468007579447, -2.0816034260171703, 2.3466373488762486, -0.06945873529326571]
-start_point2 = [-2.5657506624804896, -1.624155660668844, 2.635834042225973, 3.6897169786640625, -1.6107528845416468, -0.4420250097857874]
+start_point = [0.3155458002248069, 0.33140295210966925, 0.2798437337780457, -3.099466249999422, -0.4753739676999946, -0.05087201389760937]
+start_point2 = [-2.7212381998645228, -1.765580793420309, 2.514963213597433, 3.9297372537800292, -1.5702908674823206, -1.4512398878680628]
 
 waypoints = [
     [-2.2383063475238245, -1.846382280389303, 2.72556716600527, 3.8191911417194824, -1.6096790472613733, 0.7579470872879028],
@@ -155,6 +157,7 @@ waypoints = [
     # [-0.31561346376380156, 0.8392848297605487, 0.3870643751382633, -3.1129835149573597, -0.39044182826995194, -0.02877771799883438],
     # [0.01561346376380156, 0.8392848297605487, 0.3870643751382633, -3.1129835149573597, -0.39044182826995194, -0.02877771799883438] 
 ]
+
 
 start_point_list = setp_to_list(setp, offset=0)
 position_list = setp_to_list(setp, offset=6)  
@@ -201,8 +204,8 @@ state = con.receive()
 
 # Initial rotation offset in joint space
 joint6_angle = None
-rotation_step = 0.2
-attempts = 0
+# rotation_step = 0.2
+# attempts = 0
 
 
 while attempts < max_attempts:
@@ -217,8 +220,11 @@ while attempts < max_attempts:
         using_pos = [float(joint) for joint in current_position]  
         current_tcp_pose = state.actual_TCP_pose
         using_tcp_pose = [float(joint2) for joint2 in current_tcp_pose] 
-        image_path = capture_image()
-        tip, rod_pos, error, desired_point, alignment_angle = below_or_above2(image_path, False)
+        # image_path = capture_image()
+        image_path = new_capture()
+        # tip, rod_pos, error, desired_point, alignment_angle = below_or_above2(image_path, False)
+        tip, rod_pos, error, desired_point, alignment_angle = detect_rod_tip_darkest_right(image_path, False)
+
         robotposx, robotposy = pixel_to_robot_frame(rod_pos[0], rod_pos[1])
         print(f'Position of current rotation is {using_pos[5]}')
         print(f'Position of x is {using_tcp_pose[0]}')

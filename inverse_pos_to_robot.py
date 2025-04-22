@@ -6,11 +6,13 @@ from tip_w_spline import below_or_above
 from image_capture import capture_image
 from inverse_pos import inverse_pos_calc
 from tip_angle_predictive import below_or_above2
+from new_cam import new_capture
+from new_finder2 import detect_rod_tip_darkest_right
 
 def joint_rad_to_custom_degrees(theta_rad):
     # Known calibration points
-    rad_0_deg = -2.536228958760397
-    rad_90_deg = -1.1406424681292933
+    rad_0_deg = -2.1577184836017054
+    rad_90_deg = -1.4512398878680628
 
     # Solve for linear mapping: degrees = m * theta + b
     m = (90 - 0) / (rad_90_deg - rad_0_deg)
@@ -20,8 +22,8 @@ def joint_rad_to_custom_degrees(theta_rad):
     return custom_degrees
 def custom_degrees_to_joint_rad(custom_deg):
     # Known calibration points
-    rad_0_deg = -2.536228958760397
-    rad_90_deg = -1.1406424681292933
+    rad_0_deg = -2.1577184836017054
+    rad_90_deg = -1.4512398878680628
 
     # Linear mapping parameters
     m = (90 - 0) / (rad_90_deg - rad_0_deg)
@@ -39,8 +41,8 @@ def robot_to_inverse_frame(robot_x, robot_y):
     Returns:
         inv_x, inv_y (in meters)
     """
-    origin_robot_x = -0.013964088189107533
-    origin_robot_y = 0.36354044542182157
+    origin_robot_x = 0.2887728480163833
+    origin_robot_y = 0.4779231141005689
 
     inv_x = robot_x - origin_robot_x
     inv_y = robot_y - origin_robot_y
@@ -54,8 +56,8 @@ def inverse_to_robot_frame(inv_x, inv_y):
     Returns:
         robot_x, robot_y
     """
-    origin_robot_x = -0.013964088189107533
-    origin_robot_y = 0.36354044542182157
+    origin_robot_x = 0.2887728480163833
+    origin_robot_y = 0.4779231141005689
 
     robot_x = origin_robot_x + inv_x
     robot_y = origin_robot_y + inv_y
@@ -86,18 +88,19 @@ def position_mapping(rod_pos, robot_x, robot_y, rotation, des_angle):
     print(f'Degrees: {rotation_calc2} Radians: {theta_c_desired}')
     final_rotation = custom_degrees_to_joint_rad(rotation_calc2)
     finalp_in_catheter_x = catheter_robot_x_inv + x_calc_pos
-    finalp_in_catheter_y = catheter_robot_y_inv + y_calc_pos
+    finalp_in_catheter_y = catheter_robot_y_inv - y_calc_pos
     print(f"Desired position in inverse kinematics relative to catehter: x = {finalp_in_catheter_y:.3f}, y = {finalp_in_catheter_x:.3f}, Rotation = {theta_deg_out}")
-    mag_pos_final_x, mag_pos_final_y = inverse_to_robot_frame(finalp_in_catheter_y, finalp_in_catheter_x)
+    mag_pos_final_x, mag_pos_final_y = inverse_to_robot_frame(finalp_in_catheter_x, finalp_in_catheter_y)
     print(f"Robot Frame Reconstructed: x = {mag_pos_final_x:.3f}, y = {mag_pos_final_y:.3f}")
 
     return mag_pos_final_x, mag_pos_final_y, final_rotation
 
 
 if __name__ == "__main__":
-    image_path = capture_image()
-    tip, rod_pos, error, desired_point, alignement = below_or_above2(image_path, False)
-    x, y, deg_out = position_mapping(rod_pos, 0.23602152160567344, 0.3550124753628118, 0.32630395889282227, -10)
+    # image_path = capture_image()
+    image_path = new_capture()
+    tip, rod_pos, error, desired_point, alignement = detect_rod_tip_darkest_right(image_path, False)
+    x, y, deg_out = position_mapping(rod_pos, 0.28875612858725763, 0.3100807886270336, -2.3332939783679407, np.deg2rad(-10))
     print(f"Robot Frame Reconstructed: x = {x:.3f}, y = {y:.3f}, Rotation = {deg_out}")
     print(np.rad2deg(deg_out))
 

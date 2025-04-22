@@ -25,7 +25,7 @@ def force_from_paper_sym(r_vec, angle_deg):
 
     return F_m, T_m
 
-def sympy_solver(initial_guesses):
+def sympy_solver(angle, x_var, initial_guesses):
     # Symbolic variables
     x, y, angle = sp.symbols('x y angle')
     r_vec = sp.Matrix([x, y, 0])
@@ -136,7 +136,7 @@ def sympy_solver(initial_guesses):
     print("\nBest solution found:")
     print(f"x = {best_x[0]:.4f} m\ny = {best_x[1]:.4f} m\nangle = {best_x[2]:.2f} deg")
     print(f"Final error = {rad2deg(best_error):.4f} deg")
-    return best_x[0], best_x[2] 
+    return best_x[0], best_x[1], best_x[2] 
 
     # # Plotting
     # plt.figure()
@@ -164,31 +164,39 @@ def sympy_solver(initial_guesses):
     # plt.grid()
     # plt.show()
 # Constants
-mu0 = 4 * sp.pi * 1e-7
-Br = 1.5
-r, h = 0.04, 0.06
-r_i, h_i = 0.0005, 0.005
-V_E = sp.pi * r**2 * h
-V_I = sp.pi * r_i**2 * h_i
-m_E_mag = (Br * V_E) / mu0
-m_I_mag = (Br * V_I) / mu0
 
-# Parameters
-Ev = 3e6
-Iv = 4.1e-13
-L_total = 0.05
-dtheta_dF = (L_total**2) / (2 * Ev * Iv)
-dtheta_dT = L_total / (Ev * Iv)
-deg2rad = lambda x: x * np.pi / 180
-rad2deg = lambda x: x * 180 / np.pi
 
-alpha = 0.1
-tol = 1e-4
-max_iters = 10000
-theta_c_desired = deg2rad(24)
-initial_guesses = [45, 0, 180]
-sympy_solver(initial_guesses)
-# r_vec = sp.Matrix([0,0.25,0])
-# angle = 30
-# F_m, T_m = force_from_paper_sym(r_vec, angle)
-# print(f'Force = {F_m} Torque = {T_m}')
+if __name__ == "__main__":
+    mu0 = 4 * sp.pi * 1e-7
+    Br = 1.5
+    r, h = 0.04, 0.06
+    r_i, h_i = 0.0005, 0.005
+    V_E = sp.pi * r**2 * h
+    V_I = sp.pi * r_i**2 * h_i
+    m_E_mag = (Br * V_E) / mu0
+    m_I_mag = (Br * V_I) / mu0
+
+    # Parameters
+    Ev = 3e6
+    Iv = 4.1e-13
+    L_total = 0.05
+    dtheta_dF = (L_total**2) / (2 * Ev * Iv)
+    dtheta_dT = L_total / (Ev * Iv)
+    deg2rad = lambda x: x * np.pi / 180
+    rad2deg = lambda x: x * 180 / np.pi
+
+    alpha = 0.1
+    tol = 1e-4
+    max_iters = 500
+    theta_c_desired = deg2rad(20)
+    initial_guesses = [45, 0, 180]
+    sympy_solver(initial_guesses)
+    # r_vec = sp.Matrix([0,0.25,0])
+    # angle = 30
+    # F_m, T_m = force_from_paper_sym(r_vec, angle)
+    # print(f'Force = {F_m} Torque = {T_m}')
+    x_var = np.array([0, 0.18, 100.0])
+    angle = np.deg2rad(-24)
+    x_var[0], x_var[1], x_var[2] = sympy_solver(angle, x_var, initial_guesses)
+    print(f'Degrees: {x_var[2]} Radians: {np.deg2rad(x_var[2])}')
+    print(f'x = {x_var[0]:.4f} m\ny = {x_var[1]:.4f}')

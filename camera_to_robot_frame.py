@@ -4,11 +4,11 @@ from image_capture import capture_image
 
 def pixel_to_robot_frame(pixel_x, pixel_y):
     # Reference: known pixel and robot coordinates
-    ref_pixel = np.array([1094.98, 456.50])             # pixel_x, pixel_y
-    ref_robot = np.array([-0.013964088189107533, 0.36354044542182157])          # robot_x, robot_y
+    ref_pixel = np.array([425.99, 198.72])             # pixel_x, pixel_y
+    ref_robot = np.array([0.2073041730093494, 0.4764780825714137])          # robot_x, robot_y
 
     # Scale conversion
-    scale_pixels_per_mm = 9.55
+    scale_pixels_per_mm = 3.2
     mm_per_pixel = 1 / scale_pixels_per_mm
 
     # Compute pixel deltas

@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import splprep, splev
 from image_capture import capture_image
+from new_cam import new_capture
 def below_or_above(path, graph):
 # Load and convert to grayscale
 # image_path = "/home/jack/literate-code/captured_image.jpg"
@@ -48,18 +49,18 @@ def below_or_above(path, graph):
 
     # --- STEP 2: Fit spline through given ring points ---
     ring_coords = np.array([
-    (1221.7, 414.3),
-    (1113.1, 414.3),
-    (1017.7, 413.0),
-    (934.2, 414.3),
-    (846.8, 415.6),
-    (789.8, 417.0),
-    (758.0, 434.2),
-    (705.0, 463.3),
-    (645.4, 509.7),
-    (559.3, 581.2),
-    (449.3, 672.7),
-    (373.8, 734.9)
+    (110.7, 217.2),
+    (163.7, 221.8),
+    (212.0, 236.4),
+    (245.7, 254.3),
+    (269.5, 254.3),
+    (291.4, 249.0),
+    (327.1, 230.4),
+    (366.8, 196.0),
+    (401.9, 176.8),
+    (449.5, 161.6),
+    (502.5, 162.9),
+    (576.6, 160.9)
     ])
     x_rings, y_rings = ring_coords[:, 0], ring_coords[:, 1]
 
@@ -190,7 +191,8 @@ def below_or_above(path, graph):
     
     return tip, rod_tip_filtered, signed_distance_mm, desired_point
 if __name__ == "__main__":
-    image = capture_image()
+    # image = capture_image()
+    image = new_capture()
     tip, rod_pos, signed_distance_mm, desired_point = below_or_above(image, True)
     if tip == "Below":
         print("WHOO")
