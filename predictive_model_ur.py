@@ -38,18 +38,18 @@ plot = False
 #         file.write(log_entry)
 
 #     print(f"Logged: {log_entry.strip()}")
-translate =False
-max_attempts = 0
+translate =True
+max_attempts = 45
 
 def send_arduino_command(command):
     arduino_thread = threading.Thread(target=arduino_control, args=(command,))
     arduino_thread.start()
     return arduino_thread
 
-distance = 150
+distance = 160
 travel = str(distance_arduino(distance))
 if translate == True:
-    arduino_thread = send_arduino_command(f'REV {travel}')
+    arduino_thread = send_arduino_command(f'ON {travel}')
 
 def get_inverse(con, setp, position_inv):
     # Set registers
@@ -141,8 +141,8 @@ transformed_points = transform_point(T, d, h)
 x_robotic_arm = transformed_points[0]
 y_robotic_arm = transformed_points[1]
 
-start_point = [0.3155458002248069, 0.33140295210966925, 0.2798437337780457, -3.099466249999422, -0.4753739676999946, -0.05087201389760937]
-start_point2 = [-2.7212381998645228, -1.765580793420309, 2.514963213597433, 3.9297372537800292, -1.5702908674823206, -1.4512398878680628]
+start_point = [0.3155444774985512, 0.33140389190909014, 0.279839378899992, 0.36777814360853694, 3.089904007729656, 0.021724405192601978]
+start_point2 = [-2.7212381998645228, -1.765574117700094, 2.5149717966662806, 3.9297119814106445, -1.5702789465533655, -4.051521603261129]
 
 waypoints = [
     [-2.2383063475238245, -1.846382280389303, 2.72556716600527, 3.8191911417194824, -1.6096790472613733, 0.7579470872879028],
@@ -187,8 +187,6 @@ time.sleep(0.5)
 
 # list_to_setp(setp, start_point2, offset=6)
 # con.send(setp)
-
-
 while True:
     print(f'Waiting for moveJ() to finish start...')
     state = con.receive()
@@ -205,7 +203,7 @@ state = con.receive()
 # Initial rotation offset in joint space
 joint6_angle = None
 # rotation_step = 0.2
-# attempts = 0
+attempts = 0
 
 
 while attempts < max_attempts:
@@ -224,7 +222,6 @@ while attempts < max_attempts:
         image_path = new_capture()
         # tip, rod_pos, error, desired_point, alignment_angle = below_or_above2(image_path, False)
         tip, rod_pos, error, desired_point, alignment_angle = detect_rod_tip_darkest_right(image_path, False)
-
         robotposx, robotposy = pixel_to_robot_frame(rod_pos[0], rod_pos[1])
         print(f'Position of current rotation is {using_pos[5]}')
         print(f'Position of x is {using_tcp_pose[0]}')
@@ -234,8 +231,9 @@ while attempts < max_attempts:
         print(f"Robot Frame Reconstructed: x = {calc_newx:.3f}, y = {calc_newy:.3f}, Rotation = {deg_out}")
 
         # Keep a fixed pose orientation
-        position = [calc_newx, calc_newy, 0.19284468007579447, -2.1363892341455784, 2.298125170641374, -0.069651168329979]
-
+        position = [calc_newx, calc_newy, 0.279839378899992, 0.36777814360853694, 3.089904007729656, 0.021724405192601978]
+        calc_newy = np.clip(calc_newy, 0.15541394046736406, 0.367075638609634)
+        calc_newx = np.clip(calc_newx, 0.04326281419460651, 0.6626888999097605 )
         list_to_setp(setp, position, offset=12)
         joints_off = get_inverse(con, setp, position)
 
@@ -243,11 +241,8 @@ while attempts < max_attempts:
             # Only set once from first IK
             joint6_angle = joints_off[5]
 
-
-
-   
         joint6_angle = (deg_out)
-        joint6_angle = np.clip(joint6_angle, -2.536228958760397, 0.7649083137512207)
+        joint6_angle = np.clip(joint6_angle, -6.115246836339132, -2.434729878102438)
 
         # if tip == "Below":
         #     joint6_angle -= rotation_step
@@ -298,7 +293,7 @@ time.sleep(1.5)
 con.send_pause()
 con.disconnect()
 print("Disconnected")
-image_final = capture_image()
+
 time.sleep(3)
 travel = str(distance_arduino(0))
 if translate == True:

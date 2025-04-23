@@ -8,38 +8,48 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
     image = cv2.imread(image_path)
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    # Enhance contrast for clearer detection
     gray_enhanced = cv2.equalizeHist(gray)
 
-    # Relax dark pixel threshold to capture the tip accurately
-    dark_threshold = np.min(gray_enhanced) + 14
-    dark_pixels = np.where((gray_enhanced <= dark_threshold) & (np.arange(gray_enhanced.shape[1])[None, :] >= 95) & (np.arange(gray_enhanced.shape[1])[None, :] <= 592))
+    dark_threshold = np.min(gray_enhanced) + 13
+    mask_x = (np.arange(gray_enhanced.shape[1]) >= 55) & (np.arange(gray_enhanced.shape[1]) <= 600)
+    x_indices = np.where(mask_x)[0]
 
-    # Select the rightmost dark pixel within specified x-range
-    if len(dark_pixels[1]) == 0:
-        raise ValueError("No dark pixels found within specified x-range")
+    # Apply Y range mask (y > 90)
+    mask_y = (np.arange(gray_enhanced.shape[0]) > 140) & (np.arange(gray_enhanced.shape[0]) <= 314)
+    y_range_indices = np.where(mask_y)[0]
 
-    rightmost_idx = np.argmax(dark_pixels[1])
-    rod_tip = (dark_pixels[1][rightmost_idx], dark_pixels[0][rightmost_idx])
+    # Find all pixels below the dark threshold
+    y_all, x_all = np.where(gray_enhanced <= dark_threshold)
 
+    # Filter based on x and y indices
+    valid_idx = [i for i, (x, y) in enumerate(zip(x_all, y_all)) if x in x_indices and y in y_range_indices]
+
+    if not valid_idx:
+        raise ValueError("No dark pixels found within specified x and y ranges")
+
+    x_filtered = x_all[valid_idx]
+    y_filtered = y_all[valid_idx]
+    rightmost_idx = np.argmax(x_filtered)
+    rod_tip = (x_filtered[rightmost_idx], y_filtered[rightmost_idx])
     rod_tip_x, rod_tip_y = rod_tip
 
     # --- Fit spline through given ring points ---
     ring_coords = np.array([
-    (86.3, 248.9),
-    (137.2, 258.2),
-    (182.9, 269.6),
-    (218.2, 283.1),
-    (251.4, 308.1),
-    (280.5, 317.4),
-    (307.6, 319.5),
-    (348.1, 303.9),
-    (390.7, 267.6),
-    (444.7, 222.9),
-    (501.8, 196.9),
-    (571.4, 203.1),
-    (620.3, 205.2)
+    (14.1, 240.8),
+    (60.1, 244.3),
+    (95.0, 253.2),
+    (130.7, 268.3),
+    (157.4, 285.4),
+    (185.6, 292.3),
+    (213.0, 283.4),
+    (245.9, 260.0),
+    (282.3, 225.8),
+    (321.4, 196.3),
+    (368.0, 184.6),
+    (452.3, 186.7),
+    (525.7, 189.4),
+    (600.5, 191.5),
+    (631.3, 194.2)
     ])
     tck, _ = splprep(ring_coords.T, s=0)
     u_fine = np.linspace(0, 1, 400)
@@ -52,7 +62,7 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
 
     # Signed distance calculation
     pixel_distance = distances[closest_idx]
-    scale_pixels_per_mm = 3.2
+    scale_pixels_per_mm = 2.74
     distance_mm = pixel_distance / scale_pixels_per_mm
     signed_distance_mm = distance_mm if rod_tip_y < closest_spline_pt[1] else -distance_mm
 
