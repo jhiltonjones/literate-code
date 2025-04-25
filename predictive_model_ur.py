@@ -39,7 +39,7 @@ plot = False
 
 #     print(f"Logged: {log_entry.strip()}")
 translate =True
-max_attempts = 45
+max_attempts = 35
 
 def send_arduino_command(command):
     arduino_thread = threading.Thread(target=arduino_control, args=(command,))

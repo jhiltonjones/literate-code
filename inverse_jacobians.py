@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 def force_from_paper_sym(r_vec, angle_deg):
     mu0 = 4 * sp.pi * 1e-7
-    Br = 1.5
+    Br = 1.0
     r, h = 0.04, 0.06
     r_i, h_i = 0.0005, 0.005
     V_E = sp.pi * r**2 * h

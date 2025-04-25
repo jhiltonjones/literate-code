@@ -36,8 +36,8 @@ plot = False
 #         file.write(log_entry)
 
 #     print(f"Logged: {log_entry.strip()}")
-translate =False
-max_attempts =0
+translate =True
+max_attempts =50
 pid = PIDController(Kp=0.05, Ki=0.005, Kd=0.005, dt=0.1)
 
 def send_arduino_command(command):
@@ -45,7 +45,7 @@ def send_arduino_command(command):
     arduino_thread.start()
     return arduino_thread
 
-distance = 165
+distance = 160      
 travel = str(distance_arduino(distance))
 if translate == True:
     arduino_thread = send_arduino_command(f'ON {travel}')
@@ -232,8 +232,8 @@ while attempts < max_attempts:
 
 
 
-        rotation_adjustment = pid.update(error)
-        joint6_angle -= (rotation_adjustment)
+        rotation_adjustment = -1* pid.update(error)
+        joint6_angle += (rotation_adjustment)
         joint6_angle = np.clip(joint6_angle, -6.115246836339132, -2.434729878102438)
         print(f"PID Rotation Adjustment: {rotation_adjustment}")
         # if tip == "Below":

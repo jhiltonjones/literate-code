@@ -19,7 +19,7 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     gray_enhanced = cv2.equalizeHist(gray)
 
-    dark_threshold = np.min(gray_enhanced) + 8
+    dark_threshold = np.min(gray_enhanced) + 12
     mask_x = (np.arange(gray_enhanced.shape[1]) >= 30) & (np.arange(gray_enhanced.shape[1]) <= 600)
     x_indices = np.where(mask_x)[0]
 
@@ -31,7 +31,18 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
     y_all, x_all = np.where(gray_enhanced <= dark_threshold)
 
     # Filter based on x and y indices
-    valid_idx = [i for i, (x, y) in enumerate(zip(x_all, y_all)) if x in x_indices and y in y_range_indices]
+    # Define exclusion zone
+    exclude_x_min, exclude_x_max = 452, 478
+    exclude_y_min, exclude_y_max = 157, 165
+
+    # Filter based on x/y range and exclusion box
+    valid_idx = [
+        i for i, (x, y) in enumerate(zip(x_all, y_all))
+        if (x in x_indices and y in y_range_indices) and not (
+            exclude_x_min <= x <= exclude_x_max and exclude_y_min <= y <= exclude_y_max
+        )
+    ]
+
 
     if not valid_idx:
         raise ValueError("No dark pixels found within specified x and y ranges")
@@ -75,21 +86,22 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
 
 
     ring_coords = np.array([
-    (14.1, 240.8),
-    (60.1, 244.3),
-    (95.0, 253.2),
-    (130.7, 268.3),
-    (157.4, 285.4),
-    (185.6, 292.3),
-    (213.0, 283.4),
-    (245.9, 260.0),
-    (282.3, 225.8),
-    (321.4, 196.3),
-    (368.0, 184.6),
-    (452.3, 186.7),
-    (525.7, 189.4),
-    (600.5, 191.5),
-    (631.3, 194.2)
+    (24.2, 232.1),
+    (62.9, 238.7),
+    (99.0, 245.3),
+    (133.9, 252.5),
+    (151.6, 266.3),
+    (173.3, 274.8),
+    (193.0, 277.4),
+    (225.2, 268.2),
+    (256.7, 237.4),
+    (280.3, 214.4),
+    (314.5, 190.1),
+    (357.8, 177.6),
+    (415.0, 181.5),
+    (476.1, 181.5),
+    (579.2, 190.1),
+    (623.2, 191.4)
     ])
     tck, _ = splprep(ring_coords.T, s=0)
     u_fine = np.linspace(0, 1, 400)
@@ -107,7 +119,7 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
     segment_lengths = np.linalg.norm(deltas, axis=1)
     arc_lengths = np.insert(np.cumsum(segment_lengths), 0, 0)
     closest_arc_length = arc_lengths[closest_index]
-    target_arc_length = closest_arc_length + 10 * scale_pixels_per_mm
+    target_arc_length = closest_arc_length + 20 * scale_pixels_per_mm
 
     if target_arc_length >= arc_lengths[-1]:
         new_index = len(spline_coords) - 1
@@ -149,7 +161,7 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
 
     if graph:
         cv2.circle(image_rgb, (int(target_point[0]), int(target_point[1])), 6, (0, 0, 255), -1)
-        cv2.putText(image_rgb, "10mm along spline", (int(target_point[0]) + 10, int(target_point[1])),
+        cv2.putText(image_rgb, "20mm along spline", (int(target_point[0]) + 10, int(target_point[1])),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
         spline_poly = np.array(list(zip(x_spline, y_spline)), dtype=np.int32).reshape((-1, 1, 2))
@@ -171,8 +183,9 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
         plt.title("Rod Tip Position vs. Spline")
         plt.axis('off')
         plt.draw()
-        plt.pause(5.5)  # Show the plot for 0.3 seconds
-        plt.close()
+        # plt.pause(5.4)
+        # plt.close()
+        plt.show()
 
     print(f"Signed distance from rod tip to spline: {signed_distance_mm:.2f} mm")
     print(f"Alignment angle between catheter and spline direction: {alignment_angle:.2f} degrees")

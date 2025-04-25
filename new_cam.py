@@ -14,7 +14,7 @@ def new_capture(filename='focused_image.jpg', focus=255):
     if ret:
         cv2.imwrite(filename, frame)
         print(f"Focused image captured and saved as {filename}")
-        return filename  # <-- Return the file path explicitly
+        return filename
     else:
         raise RuntimeError("Failed to capture image")
 if __name__ == "__main__":

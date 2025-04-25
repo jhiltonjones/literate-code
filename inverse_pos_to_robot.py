@@ -10,7 +10,6 @@ from new_cam import new_capture
 from new_finder2 import detect_rod_tip_darkest_right
 from inverse_jacobians import sympy_solver
 def joint_rad_to_custom_degrees(theta_rad):
-    # Known calibration points
     rad_0_deg = -2.434729878102438
     rad_90_deg = -4.051521603261129
 
@@ -21,7 +20,6 @@ def joint_rad_to_custom_degrees(theta_rad):
     custom_degrees = m * theta_rad + b
     return custom_degrees
 def custom_degrees_to_joint_rad(custom_deg):
-    # Known calibration points
     rad_0_deg = -2.434729878102438
     rad_90_deg = -4.051521603261129
 
@@ -102,7 +100,7 @@ if __name__ == "__main__":
     # image_path = capture_image()
     image_path = new_capture()
     tip, rod_pos, error, desired_point, alignement = detect_rod_tip_darkest_right(image_path, False)
-    x, y, deg_out = position_mapping(rod_pos, 0.31555476468917787, 0.33140656376270217, -4.070913139973776, np.deg2rad(-30))
+    x, y, deg_out = position_mapping(rod_pos, 0.21925236013336719, 0.22642126037798252, -5.666762952004568, np.deg2rad(alignement))
     print(f"Robot Frame Reconstructed: x = {x:.3f}, y = {y:.3f}, Rotation = {deg_out}")
     print(np.rad2deg(deg_out))
 
