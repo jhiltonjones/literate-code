@@ -1,6 +1,6 @@
 import cv2
 
-def new_capture(filename='focused_image.jpg', focus=280):
+def new_capture(filename='focused_image.jpg', focus=255):
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         raise RuntimeError("Cannot open camera")
@@ -14,7 +14,7 @@ def new_capture(filename='focused_image.jpg', focus=280):
     if ret:
         cv2.imwrite(filename, frame)
         print(f"Focused image captured and saved as {filename}")
-        return filename  # <-- Return the file path explicitly
+        return filename
     else:
         raise RuntimeError("Failed to capture image")
 if __name__ == "__main__":

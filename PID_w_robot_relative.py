@@ -38,14 +38,14 @@ plot = False
 #     print(f"Logged: {log_entry.strip()}")
 translate =True
 max_attempts =50
-pid = PIDController(Kp=0.03, Ki=0.005, Kd=0.005, dt=0.1)
+pid = PIDController(Kp=0.05, Ki=0.005, Kd=0.005, dt=0.1)
 
 def send_arduino_command(command):
     arduino_thread = threading.Thread(target=arduino_control, args=(command,))
     arduino_thread.start()
     return arduino_thread
 
-distance = 150
+distance = 160      
 travel = str(distance_arduino(distance))
 if translate == True:
     arduino_thread = send_arduino_command(f'ON {travel}')
@@ -140,8 +140,8 @@ transformed_points = transform_point(T, d, h)
 x_robotic_arm = transformed_points[0]
 y_robotic_arm = transformed_points[1]
 
-start_point = [0.3155458002248069, 0.33140295210966925, 0.2798437337780457, -3.099466249999422, -0.4753739676999946, -0.05087201389760937]
-start_point2 = [-2.7212381998645228, -1.765580793420309, 2.514963213597433, 3.9297372537800292, -1.5702908674823206, -1.4512398878680628]
+start_point = [0.3155444774985512, 0.33140389190909014, 0.279839378899992, 0.36777814360853694, 3.089904007729656, 0.021724405192601978]
+start_point2 = [-2.7212381998645228, -1.765574117700094, 2.5149717966662806, 3.9297119814106445, -1.5702789465533655, -4.051521603261129]
 
 waypoints = [
     [-2.2383063475238245, -1.846382280389303, 2.72556716600527, 3.8191911417194824, -1.6096790472613733, 0.7579470872879028],
@@ -219,9 +219,9 @@ while attempts < max_attempts:
         # tip, rod_pos, error, desired_point = below_or_above(image_path, False)
         robotposx, robotposy = pixel_to_robot_frame(rod_pos[0], rod_pos[1])
         robotposy -= 0.1
-        robotposy = np.clip(robotposy, 0.15541394046736406, 0.397075638609634)
+        robotposy = np.clip(robotposy, 0.15541394046736406, 0.367075638609634)
         # Keep a fixed pose orientation
-        position = [robotposx, robotposy, 0.2798437337780457, -3.099466249999422, -0.4753739676999946, -0.05087201389760937]
+        position = [robotposx, robotposy, 0.279839378899992, 0.36777814360853694, 3.089904007729656, 0.021724405192601978]
 
         list_to_setp(setp, position, offset=12)
         joints_off = get_inverse(con, setp, position)
@@ -232,9 +232,9 @@ while attempts < max_attempts:
 
 
 
-        rotation_adjustment = pid.update(error)
+        rotation_adjustment = -1* pid.update(error)
         joint6_angle += (rotation_adjustment)
-        joint6_angle = np.clip(joint6_angle, -2.8736496607409876, -1.4512398878680628)
+        joint6_angle = np.clip(joint6_angle, -6.115246836339132, -2.434729878102438)
         print(f"PID Rotation Adjustment: {rotation_adjustment}")
         # if tip == "Below":
         #     joint6_angle -= rotation_step

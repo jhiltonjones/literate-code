@@ -19,41 +19,89 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     gray_enhanced = cv2.equalizeHist(gray)
 
-    dark_threshold = np.min(gray_enhanced) + 14
-    mask_x = (np.arange(gray_enhanced.shape[1]) >= 95) & (np.arange(gray_enhanced.shape[1]) <= 592)
+    dark_threshold = np.min(gray_enhanced) + 12
+    mask_x = (np.arange(gray_enhanced.shape[1]) >= 30) & (np.arange(gray_enhanced.shape[1]) <= 600)
     x_indices = np.where(mask_x)[0]
-    y_indices, x_all = np.where(gray_enhanced <= dark_threshold)
-    valid_idx = [i for i, x in enumerate(x_all) if x in x_indices]
+
+    # Apply Y range mask (y > 90)
+    mask_y = (np.arange(gray_enhanced.shape[0]) > 140) & (np.arange(gray_enhanced.shape[0]) <= 320)
+    y_range_indices = np.where(mask_y)[0]
+
+    # Find all pixels below the dark threshold
+    y_all, x_all = np.where(gray_enhanced <= dark_threshold)
+
+    # Filter based on x and y indices
+    # Define exclusion zone
+    exclude_x_min, exclude_x_max = 452, 478
+    exclude_y_min, exclude_y_max = 157, 165
+
+    # Filter based on x/y range and exclusion box
+    valid_idx = [
+        i for i, (x, y) in enumerate(zip(x_all, y_all))
+        if (x in x_indices and y in y_range_indices) and not (
+            exclude_x_min <= x <= exclude_x_max and exclude_y_min <= y <= exclude_y_max
+        )
+    ]
+
 
     if not valid_idx:
-        raise ValueError("No dark pixels found within specified x-range")
+        raise ValueError("No dark pixels found within specified x and y ranges")
 
     x_filtered = x_all[valid_idx]
-    y_filtered = y_indices[valid_idx]
+    y_filtered = y_all[valid_idx]
     rightmost_idx = np.argmax(x_filtered)
     rod_tip = (x_filtered[rightmost_idx], y_filtered[rightmost_idx])
     rod_tip_x, rod_tip_y = rod_tip
 
     # Estimate catheter direction using PCA
-    window_size = 20
-    x_start = max(0, rod_tip_x - window_size)
-    x_end = rod_tip_x
-    segment_strip = gray[y_filtered[rightmost_idx]:y_filtered[rightmost_idx]+1, x_start:x_end]
-    ys, xs = np.where(segment_strip < dark_threshold)
-    if len(xs) >= 2:
-        points = np.column_stack((xs + x_start, ys + y_filtered[rightmost_idx]))
+    # Estimate direction by collecting dark pixels in a local leftward region
+    window_x = 30  # search 30 pixels to the left
+    window_y = 10  # search 10 pixels above and below
+
+    x_min = max(0, rod_tip_x - window_x)
+    x_max = rod_tip_x
+    y_min = max(0, rod_tip_y - window_y)
+    y_max = min(gray_enhanced.shape[0], rod_tip_y + window_y)
+
+    local_region = gray_enhanced[y_min:y_max, x_min:x_max]
+    ys_local, xs_local = np.where(local_region <= dark_threshold)
+
+    if len(xs_local) >= 2:
+        xs_global = xs_local + x_min
+        ys_global = ys_local + y_min
+        points = np.column_stack((xs_global, ys_global))
         mean = np.mean(points, axis=0)
         cov = np.cov(points - mean, rowvar=False)
         eigvals, eigvecs = np.linalg.eig(cov)
-        catheter_dir = eigvecs[:, np.argmax(eigvals)]
+        principal_direction = eigvecs[:, np.argmax(eigvals)]
+
+        # Ensure the direction points rightward (toward rod tip)
+        if np.dot(principal_direction, [1, 0]) < 0:
+            principal_direction *= -1
+
+        catheter_dir = principal_direction
     else:
         mean = np.array([rod_tip_x, rod_tip_y])
         catheter_dir = np.array([1, 0])
 
+
     ring_coords = np.array([
-        (86.3, 248.9), (137.2, 258.2), (182.9, 269.6), (218.2, 283.1),
-        (251.4, 308.1), (280.5, 317.4), (307.6, 319.5), (348.1, 303.9),
-        (390.7, 267.6), (444.7, 222.9), (501.8, 196.9), (571.4, 203.1), (620.3, 205.2)
+    (24.2, 232.1),
+    (62.9, 238.7),
+    (99.0, 245.3),
+    (133.9, 252.5),
+    (151.6, 266.3),
+    (173.3, 274.8),
+    (193.0, 277.4),
+    (225.2, 268.2),
+    (256.7, 237.4),
+    (280.3, 214.4),
+    (314.5, 190.1),
+    (357.8, 177.6),
+    (415.0, 181.5),
+    (476.1, 181.5),
+    (579.2, 190.1),
+    (623.2, 191.4)
     ])
     tck, _ = splprep(ring_coords.T, s=0)
     u_fine = np.linspace(0, 1, 400)
@@ -64,14 +112,14 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
     distances = np.linalg.norm(spline_points - tip_point, axis=1)
     closest_index = np.argmin(distances)
     closest_spline_x, closest_spline_y = spline_points[closest_index]
-    scale_pixels_per_mm = 9.55
+    scale_pixels_per_mm = 2.74
 
     spline_coords = np.array([x_spline, y_spline]).T
     deltas = np.diff(spline_coords, axis=0)
     segment_lengths = np.linalg.norm(deltas, axis=1)
     arc_lengths = np.insert(np.cumsum(segment_lengths), 0, 0)
     closest_arc_length = arc_lengths[closest_index]
-    target_arc_length = closest_arc_length + 10 * scale_pixels_per_mm
+    target_arc_length = closest_arc_length + 20 * scale_pixels_per_mm
 
     if target_arc_length >= arc_lengths[-1]:
         new_index = len(spline_coords) - 1
@@ -108,12 +156,12 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
     if abs(rod_tip_y - closest_spline_y) > 2:
         relation_text = "Rod tip ABOVE spline" if rod_tip_y < closest_spline_y else "Rod tip BELOW spline"
         tip = "Above" if rod_tip_y < closest_spline_y else "Below"
-        if tip == "Below":
+        if tip == "Above":
             alignment_angle *= -1
 
     if graph:
         cv2.circle(image_rgb, (int(target_point[0]), int(target_point[1])), 6, (0, 0, 255), -1)
-        cv2.putText(image_rgb, "10mm along spline", (int(target_point[0]) + 10, int(target_point[1])),
+        cv2.putText(image_rgb, "20mm along spline", (int(target_point[0]) + 10, int(target_point[1])),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
         spline_poly = np.array(list(zip(x_spline, y_spline)), dtype=np.int32).reshape((-1, 1, 2))
@@ -134,6 +182,9 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
         plt.imshow(image_rgb)
         plt.title("Rod Tip Position vs. Spline")
         plt.axis('off')
+        plt.draw()
+        # plt.pause(5.4)
+        # plt.close()
         plt.show()
 
     print(f"Signed distance from rod tip to spline: {signed_distance_mm:.2f} mm")
