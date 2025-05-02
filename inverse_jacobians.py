@@ -3,6 +3,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def force_from_paper_sym(r_vec, angle_deg):
+    mu0 = 4 * sp.pi * 1e-7
+    Br = 1.5
+    r, h = 0.04, 0.06
+    r_i, h_i = 0.0005, 0.005
+    V_E = sp.pi * r**2 * h
+    V_I = sp.pi * r_i**2 * h_i
+    m_E_mag = (Br * V_E) / mu0
+    m_I_mag = (Br * V_I) / mu0
     theta = angle_deg * sp.pi / 180
     m_E = m_E_mag * sp.Matrix([sp.sin(theta), sp.cos(theta), 0])
     m_I = m_I_mag * sp.Matrix([1, 0, 0])
@@ -19,7 +27,7 @@ def force_from_paper_sym(r_vec, angle_deg):
     term1 = m_E * m_I.T
     term2 = m_I * m_E.T
     term3 = (m_I.T * Z * m_I)[0] * sp.eye(3)
-    F_m = (3 * lambd / p_norm) * (term1 + term2 + term3)*0   # Same as MATLAB *0 (force is zeroed)
+    F_m = (3 * lambd / p_norm) * (term1 + term2 + term3)*0   
 
     T_m = m_I.cross(D * m_E) * lambd
 
