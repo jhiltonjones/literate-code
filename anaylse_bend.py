@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from force_andtorque import force_from_paper
 
 # === Parameters ===
-magnet_distance = 0.2         # Magnet is 20cm above tip
+magnet_distance = 0.165         # Magnet is 20cm above tip
 steps = 50                    # Steps to simulate (though fixed tip here)
 
 # === Initial tip position ===

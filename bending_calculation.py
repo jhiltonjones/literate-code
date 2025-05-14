@@ -107,17 +107,17 @@ def calculate_bending_angle(realimage, plot):
             plt.legend()
             plt.title(f"Bending Angle: {bending_angle_deg_2:.2f} degrees")
             
-            plt.show(block=False)
-            plt.pause(0.5)
-            plt.close()
-            # plt.show()
+            # plt.show(block=False)
+            # plt.pause(0.5)
+            # plt.close()
+            plt.show()
 
         # return bending_angle_deg, bending_angle_deg_2
         return bending_angle_deg_2
 
 
 if __name__ == "__main__":
-    realimage = "captured_image.jpg"
+    realimage = "focused_image.jpg"
     plot = True
     bending_angle_deg_2 = calculate_bending_angle(realimage, plot)
     # print(f"Computed Bending Angle: {bending_angle_deg:.2f} degrees")

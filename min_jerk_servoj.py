@@ -28,7 +28,7 @@ def list_to_setp(setp, list):
 # ------------- robot communication stuff -----------------
 ROBOT_HOST = '192.168.56.101'
 ROBOT_PORT = 30004
-config_filename = 'control_loop_configuration.xml'  # specify xml file for data synchronization
+config_filename = 'servoj_control_loop_configuration_test.xml'  # specify xml file for data synchronization
 
 logging.getLogger().setLevel(logging.INFO)
 
@@ -71,8 +71,8 @@ watchdog.input_int_register_0 = 0
 if not con.send_start():
     sys.exit()
 
-start_pose = [-0.31561346376380156, 0.4392848297605487, 0.3870643751382633, -3.1129835149573597, -0.39044182826995194, -0.02877771799883438]
-desired_pose = [0.31561346376380156, 0.4392848297605487, 0.3870643751382633, -3.1129835149573597, -0.79044182826995194, -0.02877771799883438]
+start_pose = [0.6188608583986278, -0.041759507803289415, 0.34285463019193124, -3.1064345065085677, -0.45081274355560585, 0.02344286428792927]
+desired_pose = [0.7432549902882818, 0.023707827724638177, 0.5020241145217006, 3.0023845926439137, 0.45889158745907915, 0.5194891454951556]
 rotation_angle = np.deg2rad(45)
 start_pose[4] += rotation_angle
 orientation_const = start_pose[3:]
