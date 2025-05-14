@@ -12,7 +12,7 @@ print("Next state:", x1)
 
 
 # Time settings
-T_total = 100  # total simulation time (seconds)
+T_total = 350  # total simulation time (seconds)
 Ts = catheter_sys.dt  # timestep
 steps = int(T_total / Ts)
 

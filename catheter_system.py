@@ -2,7 +2,7 @@ import control as ct
 import numpy as np
 import sympy as sp
 from force_andtorque import force_from_paper
-# === Parameters ===
+
 catheter_params = {
     'Ev': 3e6,
     'Iv': 4.1e-13,
@@ -17,7 +17,6 @@ def rotate_vector(v, angle_rad):
     R = np.array([[c, -s], [s, c]])
     return R @ v
 
-# === Dynamics ===
 def catheter_update(t, x, u, params):
     Ev, Iv, L, v, Ts = map(params.get, ['Ev', 'Iv', 'L', 'v', 'Ts'])
 
@@ -29,7 +28,7 @@ def catheter_update(t, x, u, params):
     norm_dir = np.linalg.norm(dir_vec) + 1e-6
     dir_unit = dir_vec / norm_dir
 
-    # Step 2: Estimate tip without bending (for torque calculation)
+    # Step 2: Estimate tip without bending 
     tip_est = base + L * dir_unit
 
     # Step 3: Compute magnetic force/torque based on estimated tip
@@ -43,10 +42,10 @@ def catheter_update(t, x, u, params):
     gamma_c_hat = (Fy * L**3) / (3 * Ev * Iv) + (Tz * L**2) / (2 * Ev * Iv)
     theta_c_hat = (Fy * L**2) / (2 * Ev * Iv) + (Tz * L) / (Ev * Iv)
 
-    # Step 5: Get bending direction (based on torque)
+    # Step 5: Get bending direction 
     bending_dir = np.cross(T_m, np.array([0, 0, 1]))[:2]
     if np.linalg.norm(bending_dir) < 1e-6:
-        bending_dir = np.array([-dir_unit[1], dir_unit[0]])  # fallback
+        bending_dir = np.array([-dir_unit[1], dir_unit[0]]) 
     bending_dir /= np.linalg.norm(bending_dir)
 
     # Apply angular deflection to current direction
@@ -66,11 +65,9 @@ def catheter_update(t, x, u, params):
         return state_next
 
 
-# === Output function ===
 def catheter_output(t, x, u, params):
     return x
 
-# === Build nonlinear system ===
 catheter_sys = ct.nlsys(
     catheter_update, catheter_output,
     inputs=['magnet_x', 'magnet_y', 'magnet_angle'],

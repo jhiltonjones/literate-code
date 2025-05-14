@@ -6,11 +6,11 @@ from catheter_system import catheter_update, catheter_params
 from compute_desired_trajectory import compute_desired_trajectory
 
 # === MPC Parameters ===
-N = 10                              # Horizon steps
+N = 5                           # Horizon steps
 Ts = catheter_params['Ts']          # Timestep
 magnet_distance = 0.25              # Fixed offset above tip
 x0 = np.array([0.03, 0.0, 0.0, 0.0])  # Initial state
-total_steps = 100                   # Total MPC steps
+total_steps = 500                   # Total MPC steps
 step_size = catheter_params['v'] * catheter_params['Ts']
 
 
@@ -38,9 +38,10 @@ def mpc_cost(theta_seq, x0, Xd, N):
         x = second_order_taylor_state_prediction(catheter_update, x, u_eq, delta_u, catheter_params)
 
         tip = x[:2]
-
-        weight = 5 if t == 0 else 1  # more cost on first prediction
-        cost += weight * np.linalg.norm(tip - Xd[t])**2
+        scale = 1000
+        error = scale * (tip - Xd[t])
+        weight = 1e2 if t == 0 else 10  # more cost on first prediction
+        cost += weight * np.linalg.norm(error)**2
         if x[1] > Xd[t][1]:  # tip above desired
             overshoot_penalty = 5 * (x[1] - Xd[t][1])**2
             cost += overshoot_penalty
@@ -55,7 +56,7 @@ predicted_tips = []   # stores predicted tip at t+1
 desired_tips = []     # stores desired tip at t+1
 actual_tips = []      # stores actual tip after applying θ
 u_hist = []
-theta_guess = np.deg2rad(np.ones(N) * 90)
+theta_guess = np.ones(N) * 90
 
 
 print("Step | Desired Tip       | Chosen θ (deg) | Predicted Tip")
