@@ -3,6 +3,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def force_from_paper_sym(r_vec, angle_deg):
+    mu0 = 4 * sp.pi * 1e-7
+    Br = 0.4
+    r, h = 0.04, 0.06
+    r_i, h_i = 0.0005, 0.005
+    V_E = sp.pi * r**2 * h
+    V_I = sp.pi * r_i**2 * h_i
+    m_E_mag = (Br * V_E) / mu0
+    m_I_mag = (Br * V_I) / mu0
     theta = angle_deg * sp.pi / 180
     m_E = m_E_mag * sp.Matrix([sp.sin(theta), sp.cos(theta), 0])
     m_I = m_I_mag * sp.Matrix([1, 0, 0])
@@ -49,7 +57,7 @@ def bend_test(x_var):
     return theta_c_hat
 
 def sympy_solver(angle, x_var, angle2):
-    Ev = 3e6
+    Ev = 4e6
     Iv = 4.1e-13
     L_total = 0.3
     dtheta_dF = (L_total**2) / (2 * Ev * Iv)
@@ -59,7 +67,7 @@ def sympy_solver(angle, x_var, angle2):
     initial_guesses = [45, 0, 180]
     alpha = 0.1
     tol = 1e-4
-    max_iters = 500
+    max_iters = 700
     # Symbolic variables
     x, y, angle = sp.symbols('x y angle')
     r_vec = sp.Matrix([x, y, 0])
@@ -92,6 +100,7 @@ def sympy_solver(angle, x_var, angle2):
     for a in initial_guesses:
         x_var = np.array([0.01, 0.18, a], dtype=float)
         print(f"Guess {a}")
+
         for iter in range(max_iters):
             x_, y_, angle_ = x_var
             F_m = F_fn(x_, y_, angle_)
@@ -152,7 +161,7 @@ def sympy_solver(angle, x_var, angle2):
 
             # Clamp
             x_var[0] = np.clip(x_var[0], 0, 0.05)
-            x_var[1] = np.clip(x_var[1], 0.17, 0.22)
+            x_var[1] = np.clip(x_var[1], 0.18, 0.22)
             x_var[2] = np.clip(x_var[2], 0, 180)
 
             # Best solution tracker
@@ -167,10 +176,10 @@ def sympy_solver(angle, x_var, angle2):
             #     print(f"‖J‖ = {np.linalg.norm(J_theta):.4e}, ‖Δx‖ = {np.linalg.norm(delta_x):.4e}")
             if iter % 1000 == 0:
                 print("Jacobian:", J_theta)
-    print("\nBest solution found:")
+    print(f"\nBest solution found for {np.rad2deg(angle2)}:")
     print(f"x = {best_x[0]:.4f} m\ny = {best_x[1]:.4f} m\nangle = {best_x[2]:.2f} deg")
     print(f"Final error = {rad2deg(best_error):.4f} deg")
-    return best_x[0], best_x[1], best_x[2] 
+    return best_x[0], best_x[1]-0.2, best_x[2] 
 
     # # Plotting
     # plt.figure()
@@ -232,11 +241,11 @@ if __name__ == "__main__":
 
 
     x_var = np.array([0, 0.17, 0.0])
-    # angle = np.deg2rad(-24)
-    # angle2 = np.deg2rad(-24)
-    # x_var[0], x_var[1], x_var[2] = sympy_solver(angle, x_var, angle2)
-    # print(f'Degrees: {x_var[2]} Radians: {np.deg2rad(x_var[2])}')
-    # print(f'x = {x_var[0]:.4f} m\ny = {x_var[1]:.4f}')
+    angle = np.deg2rad(24)
+    angle2 = np.deg2rad(24)
+    x_var[0], x_var[1], x_var[2] = sympy_solver(angle, x_var, angle2)
+    print(f'Degrees: {x_var[2]} Radians: {np.deg2rad(x_var[2])}')
+    print(f'x = {x_var[0]:.4f} m\ny = {x_var[1]:.4f}')
 
-    bending = bend_test(x_var)
-    print(f'Bending is {np.rad2deg(bending)}')
+    # bending = bend_test(x_var)
+    # print(f'Bending is {np.rad2deg(bending)}')

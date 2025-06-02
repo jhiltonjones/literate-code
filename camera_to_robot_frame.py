@@ -3,13 +3,14 @@ from tip_w_spline import below_or_above
 from image_capture import capture_image
 from new_cam import new_capture
 from new_tip_finder import detect_rod_tip_darkest_right
+
 def pixel_to_robot_frame(pixel_x, pixel_y):
     # Reference: known pixel and robot coordinates
-    ref_pixel = np.array([294.82, 187.03])             # pixel_x, pixel_y
-    ref_robot = np.array([0.22582366327064307, 0.4826766049158374])          # robot_x, robot_y
+    ref_pixel = np.array([406.74, 189.06])             # pixel_x, pixel_y
+    ref_robot = np.array([0.7720231002154476, -0.32909722633939664])          # robot_x, robot_y
 
     # Scale conversion
-    scale_pixels_per_mm = 2.74
+    scale_pixels_per_mm = 2.77
     mm_per_pixel = 1 / scale_pixels_per_mm
 
     # Compute pixel deltas
@@ -17,7 +18,7 @@ def pixel_to_robot_frame(pixel_x, pixel_y):
     dy_px = pixel_y - ref_pixel[1]  # pixel_y ↔ robot_x (inverted)
 
     # Convert to mm, then to meters
-    dx_m = -dx_px * mm_per_pixel / 1000.0   # invert for robot_y
+    dx_m = dx_px * mm_per_pixel / 1000.0   # invert for robot_y
     dy_m = dy_px * mm_per_pixel / 1000.0   # invert for robot_x
 
     # Apply offset
@@ -34,4 +35,5 @@ if __name__ == "__main__":
     print(f"Rod pixel position: {rod_pos}")
     
     robotposx, robotposy = pixel_to_robot_frame(rod_pos[0], rod_pos[1])
+    print(robotposy)
     print(f"Robot frame position: x = {robotposx:.5f}, y = {robotposy:.5f}")

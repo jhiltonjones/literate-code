@@ -17,7 +17,7 @@ from bending_calculation import calculate_bending_angle
 import os
 from tip_w_spline import below_or_above
 import threading
-from talk_arduino import arduino_control, distance_arduino
+from talk_arduino import arduino_control, distance_to_steps
 from camera_to_robot_frame import pixel_to_robot_frame
 from PID_control import PIDController
 from inverse_pos_to_robot import position_mapping
@@ -39,17 +39,18 @@ plot = False
 
 #     print(f"Logged: {log_entry.strip()}")
 translate =True
-max_attempts = 35
+max_attempts = 50
 
-def send_arduino_command(command):
-    arduino_thread = threading.Thread(target=arduino_control, args=(command,))
+def send_arduino_command(command, delay_us=None):
+    arduino_thread = threading.Thread(target=arduino_control, args=(command, delay_us))
     arduino_thread.start()
     return arduino_thread
 
-distance = 160
-travel = str(distance_arduino(distance))
+
+distance = 150
+travel = str(distance_to_steps(distance))
 if translate == True:
-    arduino_thread = send_arduino_command(f'ON {travel}')
+    arduino_thread = send_arduino_command(f'ON {travel}', delay_us=40)
 
 def get_inverse(con, setp, position_inv):
     # Set registers
@@ -141,8 +142,8 @@ transformed_points = transform_point(T, d, h)
 x_robotic_arm = transformed_points[0]
 y_robotic_arm = transformed_points[1]
 
-start_point = [0.3155444774985512, 0.33140389190909014, 0.279839378899992, 0.36777814360853694, 3.089904007729656, 0.021724405192601978]
-start_point2 = [-2.7212381998645228, -1.765574117700094, 2.5149717966662806, 3.9297119814106445, -1.5702789465533655, -4.051521603261129]
+start_point = [0.6543884818559477, -0.2883438607990334, 0.27943643062547097, 1.7856095264187564, -2.150164865767979, -0.48906322879545844]
+start_point2 = [-0.1684048811541956, -1.854762693444723, -1.9077978134155273, -1.4092756074718018, 1.5657159090042114, 0.018099181354045868]
 
 waypoints = [
     [-2.2383063475238245, -1.846382280389303, 2.72556716600527, 3.8191911417194824, -1.6096790472613733, 0.7579470872879028],
@@ -231,9 +232,9 @@ while attempts < max_attempts:
         print(f"Robot Frame Reconstructed: x = {calc_newx:.3f}, y = {calc_newy:.3f}, Rotation = {deg_out}")
 
         # Keep a fixed pose orientation
-        position = [calc_newx, calc_newy, 0.279839378899992, 0.36777814360853694, 3.089904007729656, 0.021724405192601978]
-        calc_newy = np.clip(calc_newy, 0.15541394046736406, 0.367075638609634)
-        calc_newx = np.clip(calc_newx, 0.04326281419460651, 0.6626888999097605 )
+        position = [calc_newx, calc_newy, 0.27943643062547097, 1.7856095264187564, -2.150164865767979, -0.48906322879545844]
+        calc_newy = np.clip(calc_newy, -0.4665337195986764, -0.261997527714459)
+        calc_newx = np.clip(calc_newx, 0.5473123993450011, 0.7726033273651082)
         list_to_setp(setp, position, offset=12)
         joints_off = get_inverse(con, setp, position)
 
@@ -242,7 +243,7 @@ while attempts < max_attempts:
             joint6_angle = joints_off[5]
 
         joint6_angle = (deg_out)
-        joint6_angle = np.clip(joint6_angle, -6.115246836339132, -2.434729878102438)
+        joint6_angle = np.clip(joint6_angle, -1.6290796438800257, 1.8401116132736206)
 
         # if tip == "Below":
         #     joint6_angle -= rotation_step
@@ -295,6 +296,6 @@ con.disconnect()
 print("Disconnected")
 
 time.sleep(3)
-travel = str(distance_arduino(0))
-if translate == True:
-    arduino_thread = send_arduino_command(f'ON {travel}')
+# travel = str(distance_to_steps(0))
+# if translate == True:
+#     arduino_thread = send_arduino_command(f'ON {travel}')

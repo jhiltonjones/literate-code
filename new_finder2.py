@@ -12,6 +12,52 @@ def compute_angle(v1, v2):
     angle_rad = np.arccos(dot_prod)
     angle_deg = np.degrees(angle_rad)
     return angle_deg
+import numpy as np
+import cv2
+
+def estimate_catheter_direction(gray_enhanced, rod_tip_x, rod_tip_y, dark_threshold, debug_image=None):
+    window_x = 30
+    window_y = 10
+
+    x_min = rod_tip_x
+    x_max = min(gray_enhanced.shape[1], rod_tip_x + window_x)
+    y_min = max(0, rod_tip_y - window_y)
+    y_max = min(gray_enhanced.shape[0], rod_tip_y + window_y)
+
+    local_region = gray_enhanced[y_min:y_max, x_min:x_max]
+    ys_local, xs_local = np.where(local_region <= dark_threshold)
+
+    if len(xs_local) >= 2:
+        xs_global = xs_local + x_min
+        ys_global = ys_local + y_min
+        points = np.column_stack((xs_global, ys_global))
+
+        # PCA
+        centered = points - np.mean(points, axis=0)
+        _, _, vh = np.linalg.svd(centered, full_matrices=False)
+        principal_direction = vh[0]
+
+        to_tip = np.array([rod_tip_x, rod_tip_y]) - np.mean(points, axis=0)
+        if np.dot(principal_direction, to_tip) < 0:
+            principal_direction *= -1
+
+        catheter_dir = principal_direction / np.linalg.norm(principal_direction)
+
+        # Optional visualization
+        if debug_image is not None:
+            pt1 = (int(rod_tip_x), int(rod_tip_y))
+            pt2 = (int(rod_tip_x - 20 * catheter_dir[0]), int(rod_tip_y - 20 * catheter_dir[1]))
+            cv2.arrowedLine(debug_image, pt1, pt2, (0, 255, 0), 2, tipLength=0.3)
+
+        return catheter_dir, np.mean(points, axis=0)
+
+    else:
+        print("Warning: Not enough dark pixels found. Using fallback direction.")
+        catheter_dir = np.array([1.0, 0.0])
+        mean_point = np.array([rod_tip_x, rod_tip_y])
+        return catheter_dir, mean_point
+
+
 
 def detect_rod_tip_darkest_right(image_path, graph=True):
     image = cv2.imread(image_path)
@@ -19,21 +65,21 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     gray_enhanced = cv2.equalizeHist(gray)
 
-    dark_threshold = np.min(gray_enhanced) + 12
-    mask_x = (np.arange(gray_enhanced.shape[1]) >= 30) & (np.arange(gray_enhanced.shape[1]) <= 600)
+    dark_threshold = np.min(gray_enhanced) + 15
+    mask_x = (np.arange(gray_enhanced.shape[1]) >= 90.5) & (np.arange(gray_enhanced.shape[1]) <= 700)
     x_indices = np.where(mask_x)[0]
-
+    # exclude_x_min, exclude_x_max = 250, 383
+    # exclude_y_min, exclude_y_max = 185, 218
     # Apply Y range mask (y > 90)
-    mask_y = (np.arange(gray_enhanced.shape[0]) > 140) & (np.arange(gray_enhanced.shape[0]) <= 320)
+    mask_y = (np.arange(gray_enhanced.shape[0]) > 70) & (np.arange(gray_enhanced.shape[0]) <= 260)
     y_range_indices = np.where(mask_y)[0]
 
     # Find all pixels below the dark threshold
     y_all, x_all = np.where(gray_enhanced <= dark_threshold)
 
-    # Filter based on x and y indices
     # Define exclusion zone
-    exclude_x_min, exclude_x_max = 452, 478
-    exclude_y_min, exclude_y_max = 157, 165
+    exclude_x_min, exclude_x_max = 0,0
+    exclude_y_min, exclude_y_max = 0,0
 
     # Filter based on x/y range and exclusion box
     valid_idx = [
@@ -49,59 +95,29 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
 
     x_filtered = x_all[valid_idx]
     y_filtered = y_all[valid_idx]
-    rightmost_idx = np.argmax(x_filtered)
-    rod_tip = (x_filtered[rightmost_idx], y_filtered[rightmost_idx])
+    leftmost_idx = np.argmin(x_filtered)
+
+    rod_tip = (x_filtered[leftmost_idx], y_filtered[leftmost_idx])
     rod_tip_x, rod_tip_y = rod_tip
 
-    # Estimate catheter direction using PCA
-    # Estimate direction by collecting dark pixels in a local leftward region
-    window_x = 30  # search 30 pixels to the left
-    window_y = 10  # search 10 pixels above and below
-
-    x_min = max(0, rod_tip_x - window_x)
-    x_max = rod_tip_x
-    y_min = max(0, rod_tip_y - window_y)
-    y_max = min(gray_enhanced.shape[0], rod_tip_y + window_y)
-
-    local_region = gray_enhanced[y_min:y_max, x_min:x_max]
-    ys_local, xs_local = np.where(local_region <= dark_threshold)
-
-    if len(xs_local) >= 2:
-        xs_global = xs_local + x_min
-        ys_global = ys_local + y_min
-        points = np.column_stack((xs_global, ys_global))
-        mean = np.mean(points, axis=0)
-        cov = np.cov(points - mean, rowvar=False)
-        eigvals, eigvecs = np.linalg.eig(cov)
-        principal_direction = eigvecs[:, np.argmax(eigvals)]
-
-        # Ensure the direction points rightward (toward rod tip)
-        if np.dot(principal_direction, [1, 0]) < 0:
-            principal_direction *= -1
-
-        catheter_dir = principal_direction
-    else:
-        mean = np.array([rod_tip_x, rod_tip_y])
-        catheter_dir = np.array([1, 0])
-
+    catheter_dir, mean = estimate_catheter_direction(gray_enhanced, rod_tip_x, rod_tip_y, dark_threshold, debug_image=image_rgb)
 
     ring_coords = np.array([
-    (24.2, 232.1),
-    (62.9, 238.7),
-    (99.0, 245.3),
-    (133.9, 252.5),
-    (151.6, 266.3),
-    (173.3, 274.8),
-    (193.0, 277.4),
-    (225.2, 268.2),
-    (256.7, 237.4),
-    (280.3, 214.4),
-    (314.5, 190.1),
-    (357.8, 177.6),
-    (415.0, 181.5),
-    (476.1, 181.5),
-    (579.2, 190.1),
-    (623.2, 191.4)
+    (620.3, 144.6),
+    (591.3, 137.2),
+    (560.2, 123.7),
+    (522.5, 107.5),
+    (494.8, 104.2),
+    (469.8, 112.2),
+    (443.5, 128.4),
+    (424.6, 147.3),
+    (397.0, 160.8),
+    (369.3, 170.3),
+    (328.8, 180.4),
+    (291.1, 194.6),
+    (258.7, 202.0),
+    (207.4, 204.0),
+    (162.2, 207.4)
     ])
     tck, _ = splprep(ring_coords.T, s=0)
     u_fine = np.linspace(0, 1, 400)
@@ -112,7 +128,7 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
     distances = np.linalg.norm(spline_points - tip_point, axis=1)
     closest_index = np.argmin(distances)
     closest_spline_x, closest_spline_y = spline_points[closest_index]
-    scale_pixels_per_mm = 2.74
+    scale_pixels_per_mm = 2.66
 
     spline_coords = np.array([x_spline, y_spline]).T
     deltas = np.diff(spline_coords, axis=0)
@@ -200,3 +216,4 @@ if __name__ == "__main__":
     print("Tip position:", tip_pos)
     print("Distance (mm):", dist_mm)
     print("Angle (deg):", angle)
+    print(tip_pos[0])
