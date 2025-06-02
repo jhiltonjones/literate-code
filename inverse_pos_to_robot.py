@@ -34,7 +34,9 @@ def custom_degrees_to_joint_rad(custom_deg):
 def robot_to_inverse_frame(robot_x, robot_y):
     """
     Converts a robot-frame position to the inverse kinematics frame.
-    The IK frame origin is defined at (-0.013964088189107533, 0.36354044542182157) in robot coordinates.
+    This should be the position of the rod in the robot frame. The inverse frame should give 0,0 in the original position.
+    The inverse frame is there for the jacobian to be computed.
+    The jacobian will then return the positon of the magnet to produce the bending required.
 
     Returns:
         inv_x, inv_y (in meters)
@@ -92,6 +94,7 @@ def position_mapping(rod_pos, robot_x, robot_y, rotation, des_angle):
     if np.rad2deg(des_angle) > 15:
         print(f"yposition = {y_calc_pos}")
         y_calc_pos += 0.15
+        # This is to align the field with the vessel branch 
         print(f"yposition adjusted = {y_calc_pos}")
     elif np.rad2deg(des_angle) < -15:
         y_calc_pos -=0.1

@@ -32,7 +32,6 @@ def estimate_catheter_direction(gray_enhanced, rod_tip_x, rod_tip_y, dark_thresh
         ys_global = ys_local + y_min
         points = np.column_stack((xs_global, ys_global))
 
-        # PCA
         centered = points - np.mean(points, axis=0)
         _, _, vh = np.linalg.svd(centered, full_matrices=False)
         principal_direction = vh[0]
@@ -43,7 +42,6 @@ def estimate_catheter_direction(gray_enhanced, rod_tip_x, rod_tip_y, dark_thresh
 
         catheter_dir = principal_direction / np.linalg.norm(principal_direction)
 
-        # Optional visualization
         if debug_image is not None:
             pt1 = (int(rod_tip_x), int(rod_tip_y))
             pt2 = (int(rod_tip_x - 20 * catheter_dir[0]), int(rod_tip_y - 20 * catheter_dir[1]))
@@ -70,18 +68,15 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
     x_indices = np.where(mask_x)[0]
     # exclude_x_min, exclude_x_max = 250, 383
     # exclude_y_min, exclude_y_max = 185, 218
-    # Apply Y range mask (y > 90)
+ 
     mask_y = (np.arange(gray_enhanced.shape[0]) > 70) & (np.arange(gray_enhanced.shape[0]) <= 260)
     y_range_indices = np.where(mask_y)[0]
 
-    # Find all pixels below the dark threshold
     y_all, x_all = np.where(gray_enhanced <= dark_threshold)
 
-    # Define exclusion zone
     exclude_x_min, exclude_x_max = 0,0
     exclude_y_min, exclude_y_max = 0,0
 
-    # Filter based on x/y range and exclusion box
     valid_idx = [
         i for i, (x, y) in enumerate(zip(x_all, y_all))
         if (x in x_indices and y in y_range_indices) and not (
@@ -182,10 +177,10 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
 
         spline_poly = np.array(list(zip(x_spline, y_spline)), dtype=np.int32).reshape((-1, 1, 2))
         cv2.polylines(image_rgb, [spline_poly], isClosed=False, color=(0, 255, 0), thickness=2)
-        cv2.circle(image_rgb, rod_tip, 10, (255, 0, 0), -1)
+        # cv2.circle(image_rgb, rod_tip, 10, (255, 0, 0), -1)
         cv2.putText(image_rgb, "Rod Tip (darkest)", (rod_tip_x + 10, rod_tip_y),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-        cv2.circle(image_rgb, (int(closest_spline_x), int(closest_spline_y)), 8, (0, 255, 255), -1)
+        # cv2.circle(image_rgb, (int(closest_spline_x), int(closest_spline_y)), 8, (0, 255, 255), -1)
         cv2.putText(image_rgb, "Closest Spline Pt", (int(closest_spline_x) + 10, int(closest_spline_y)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
         cv2.putText(image_rgb, relation_text, (50, 50),

@@ -1,4 +1,5 @@
-#inv_joint_work_w_relative.urp, this uses PID control from the inputed spline to move the robot arm in relation to the catheter. The translation is constant speed.
+#inv_joint_work_w_relative_wait.urp, this uses PID control from the inputed spline to move the robot arm in relation to the catheter. The translation is variable speed.
+#This uses a combination of inverse kinematics and the actual joints
 
 import sys
 import logging
@@ -228,7 +229,7 @@ while attempts < max_attempts:
 
                 if abs_angle > 50:
                     print("SPEED Super Slow")
-                    arduino_queue.put((f'ON {steps}', 60))  # slowest
+                    arduino_queue.put((f'ON {steps}', 60))  
                 elif abs_angle > 20:
                     print("SPEED Slow")
                     arduino_queue.put((f'ON {steps}', 50))
@@ -262,7 +263,6 @@ while attempts < max_attempts:
         joints_off = get_inverse(con, setp, position)
 
         if joint6_angle is None:
-            # Only set once from first IK
             joint6_angle = joints_off[5]
 
         joint6_angle = (deg_out)

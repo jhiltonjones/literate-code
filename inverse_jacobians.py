@@ -57,6 +57,7 @@ def bend_test(x_var):
     return theta_c_hat
 
 def sympy_solver(angle, x_var, angle2):
+    "This is the beam theory that solves the deflection"
     Ev = 4e6
     Iv = 4.1e-13
     L_total = 0.3
