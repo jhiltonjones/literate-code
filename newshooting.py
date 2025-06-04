@@ -403,19 +403,31 @@ def compute_jacobian(s_vals, theta_vals, x_vals, y_vals, magnet_pos, magnet_dipo
             J_vals = [J_p[i] + C * J_h[i] for i in range(n)]
     return J_vals
 
+def rotate_vector(v, axis, angle_rad):
+    """
+    Rotate vector v around the given axis by angle_rad using Rodrigues' rotation formula.
+    """
+    axis = axis / np.linalg.norm(axis)
+    v_rot = (v * np.cos(angle_rad) +
+             np.cross(axis, v) * np.sin(angle_rad) +
+             axis * np.dot(axis, v) * (1 - np.cos(angle_rad)))
+    return v_rot
 
 # Original 3D magnet position
-magnet_3d = np.array([-0.05, 0.1, 0.02])  # x, y, z
+magnet_3d = np.array([0.1, 0.1, 0.06])  # x, y, z
 catheter_base = np.array([0.05, 0.0, 0.0])
 
-# Step 1: Compute φ (angle in YZ plane)
 phi = compute_phi_from_yz(magnet_3d[1], magnet_3d[2])
 
 # Step 2: Project 3D magnet into 2D solver plane
 magnet_2d = project_magnet_to_2d(magnet_3d[0], magnet_3d[1], magnet_3d[2])
 
 # Step 3: Solve in 2D
-psi = np.arctan2(magnet_2d[1] - 0.0, magnet_2d[0] - 0.0)
+# psi = np.arctan2(magnet_2d[1] - 0.0, magnet_2d[0] - 0.0)
+delta = np.deg2rad(180)  # or any desired angle in radians
+
+psi = np.arctan2(magnet_2d[1], magnet_2d[0]) + delta
+
 s_vals, theta_vals, x_vals, y_vals = solve_deflection_angle(magnet_2d, psi)
 
 # Step 4: Rotate the 2D result back into 3D
