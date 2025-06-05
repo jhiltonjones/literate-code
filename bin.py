@@ -1,54 +1,43 @@
 import numpy as np
-import sympy as sp
-from sympy import lambdify
+import matplotlib.pyplot as plt
 
-# --- Parameters ---
-theta_val = np.pi / 4           # 45 degrees
-x_val, y_val = 0.01, 0.0        # internal magnet position
-x_m_val, y_m_val = 0.0, 0.0     # external magnet at origin
-psi_val = 0.0                   # external dipole pointing right (along x-axis)
-mu0 = 4 * np.pi * 1e-7
-MAGNET_M = 1.0                  # normalized magnetic moment
-r_val = np.sqrt((x_val - x_m_val)**2 + (y_val - y_m_val)**2)
-C_val = mu0 * MAGNET_M / (4 * np.pi * r_val**3)
+# Define a toy function to mimic ε(k0) = θ'(L; k0)
+def epsilon(k0):
+    return np.sin(k0) - 0.5  # Root when sin(k0) = 0.5
 
-# --- Symbolic expression for derivative ---
-theta, x, y, x_m, y_m, psi = sp.symbols('theta x y x_m y_m psi')
-C = sp.Symbol('C')
+# Setup initial guesses
+k0_vals = np.linspace(0, 10, 500)
+eps_vals = epsilon(k0_vals)
 
-px = x - x_m
-py = y - y_m
-r = sp.sqrt(px**2 + py**2)
-a = px / r
-b = py / r
+# Initial bracket values
+k0_low = 0.0
+k0_high = 1.0
+res_low = epsilon(k0_low)
+res_high = epsilon(k0_high)
 
-# External magnet unit vector
-m_hat = sp.Matrix([sp.cos(psi), sp.sin(psi)])
-p_hat = sp.Matrix([a, b])
-dot_pm = p_hat.dot(m_hat)
-b_vec = C * (3 * dot_pm * p_hat - m_hat)
+# Store the brackets and evaluated points
+bracket_progress = [(k0_low, res_low), (k0_high, res_high)]
 
-# Internal dipole and its derivative
-Rm = sp.Matrix([sp.cos(theta), sp.sin(theta)])
-first_term_expr = sp.simplify(sp.diff(Rm.dot(b_vec), theta))
+# Expand until sign change is found
+attempts = 0
+while res_low * res_high > 0 and attempts < 10:
+    k0_low = k0_high
+    res_low = res_high
+    k0_high *= 2
+    res_high = epsilon(k0_high)
+    bracket_progress.append((k0_high, res_high))
+    attempts += 1
 
-# Lambdify
-f_first_term = lambdify((theta, x, y, x_m, y_m, psi, C), first_term_expr, modules='numpy')
-
-# Evaluate symbolic derivative
-val1 = f_first_term(theta_val, x_val, y_val, x_m_val, y_m_val, psi_val, C_val)
-print("Symbolic expanded value:", val1)
-
-# --- Manual computation using Bx, By ---
-px = x_val - x_m_val
-py = y_val - y_m_val
-r3 = r_val**3
-a = px / r_val
-b = py / r_val
-dot_pm = a * np.cos(psi_val) + b * np.sin(psi_val)
-
-Bx = C_val * (3 * dot_pm * a - np.cos(psi_val))
-By = C_val * (3 * dot_pm * b - np.sin(psi_val))
-
-val2 = -np.sin(theta_val) * Bx + np.cos(theta_val) * By
-print("Manual value:", val2)
+# Plot the function and the bracketing process
+plt.figure(figsize=(10, 5))
+plt.plot(k0_vals, eps_vals, label=r"$\varepsilon(k_0) = \sin(k_0) - 0.5$")
+plt.axhline(0, color='gray', linestyle='--')
+for i, (k, v) in enumerate(bracket_progress):
+    plt.plot(k, v, 'o', label=f'Attempt {i}: k0={k:.2f}, ε={v:.2f}')
+plt.xlabel(r"$k_0$")
+plt.ylabel(r"$\varepsilon(k_0)$")
+plt.title("Bracketing ε(k₀) to Find Root")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()

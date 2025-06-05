@@ -17,7 +17,7 @@ I = math.pi * r**4 / 4.0
 # Magnetic constants for the external magnet (point dipole model)
 MU0 = 4 * math.pi * 1e-7      # vacuum permeability (μ0)
 M = 8000
-print(M)
+
 MAGNET_M = 318           # magnet's dipole moment magnitude (A·m^2), calibrated for the N52 magnet
 import numpy as np
 
@@ -30,6 +30,7 @@ def compute_phi_from_yz(y_mag, z_mag):
 def project_magnet_to_2d(x_mag, y_mag, z_mag):
     y_proj = np.sqrt(y_mag**2 + z_mag**2)  # radial projection onto the YZ plane
     return np.array([x_mag, y_proj])
+
 def rotate_2d_to_3d(x_vals, y_vals, phi):
     x_vals = np.array(x_vals)
     y_vals = np.array(y_vals)
@@ -123,92 +124,93 @@ def finite_difference_second_term(theta_val, x_val, y_val, x_m, y_m, psi_val, h=
 
 # --- Step 1: Rebuild symbolic second term ---
 # Redefine symbolic variables
-theta, x, y, x_m, y_m, psi = sp.symbols('theta x y x_m y_m psi')
-C = sp.Symbol('C')
-C_grad = sp.Symbol('C_grad')
-px = x - x_m
-py = y - y_m
-r = sp.sqrt(px**2 + py**2)
-a = px / r
-b = py / r
+# theta, x, y, x_m, y_m, psi = sp.symbols('theta x y x_m y_m psi')
+# C = sp.Symbol('C')
+# C_grad = sp.Symbol('C_grad')
+# px = x - x_m
+# py = y - y_m
+# r = sp.sqrt(px**2 + py**2)
+# a = px / r
+# b = py / r
 
-# Define external magnet unit vector
-m_hat = sp.Matrix([sp.cos(psi), sp.sin(psi)])
-p_hat = sp.Matrix([a, b])
+# # Define external magnet unit vector
+# m_hat = sp.Matrix([sp.cos(psi), sp.sin(psi)])
+# p_hat = sp.Matrix([a, b])
 
-# Magnetic field vector b
-dot_pm = p_hat.dot(m_hat)
-b_vec = C * (3 * dot_pm * p_hat - m_hat)
-
-
-
-# Internal rotated dipole and dx/dtheta
-# Re-define for clarity
-theta = sp.Symbol('theta')
-Rm = sp.Matrix([sp.cos(theta), sp.sin(theta)])
-Rm_dtheta = sp.Matrix([-sp.sin(theta), sp.cos(theta)])
-
-# dot_product = Rm.dot(b_vec)
-# dot_derivative = sp.simplify(sp.diff(dot_product, theta))
-# manual_expected = sp.simplify(Rm_dtheta.dot(b_vec))
-
-# # Check equality
-
-dx_dtheta = sp.Matrix([-sp.sin(theta), sp.cos(theta)])
-
-# Gradient of b with respect to x, y
-grad_b = sp.Matrix([[sp.diff(bi, x), sp.diff(bi, y)] for bi in b_vec])
-
-# Second term of chain rule
-first_term_expr = sp.simplify(sp.diff(Rm.dot(b_vec), theta))
-# print(f"First term is : {first_term_expr}")
-# assert first_term_expr.equals(manual_expected), "Derivative does not match manual expected value"
+# # Magnetic field vector b
+# dot_pm = p_hat.dot(m_hat)
+# b_vec = C * (3 * dot_pm * p_hat - m_hat)
 
 
-f_first_term = sp.lambdify(
-    (theta, x, y, x_m, y_m, psi, C),
-    first_term_expr,
-    modules="numpy"
-)
+
+# # Internal rotated dipole and dx/dtheta
+# # Re-define for clarity
+# theta = sp.Symbol('theta')
+# Rm = sp.Matrix([sp.cos(theta), sp.sin(theta)])
+# Rm_dtheta = sp.Matrix([-sp.sin(theta), sp.cos(theta)])
+
+# # dot_product = Rm.dot(b_vec)
+# # dot_derivative = sp.simplify(sp.diff(dot_product, theta))
+# # manual_expected = sp.simplify(Rm_dtheta.dot(b_vec))
+
+# # # Check equality
+
+# dx_dtheta = sp.Matrix([-sp.sin(theta), sp.cos(theta)])
+
+# # Gradient of b with respect to x, y
+# grad_b = sp.Matrix([[sp.diff(bi, x), sp.diff(bi, y)] for bi in b_vec])
+# print("Solve first term")
+# # Second term of chain rule
+# first_term_expr = sp.simplify(sp.diff(Rm.dot(b_vec), theta))
+# # print(f"First term is : {first_term_expr}")
+# # assert first_term_expr.equals(manual_expected), "Derivative does not match manual expected value"
+
+# print("Solve first term2")
+# f_first_term = sp.lambdify(
+#     (theta, x, y, x_m, y_m, psi, C),
+#     first_term_expr,
+#     modules="numpy"
+# )
 
 
-m1 = sp.cos(psi)
-m2 = sp.sin(psi)
-a_sym = px / r
-b_sym = py / r
+# m1 = sp.cos(psi)
+# m2 = sp.sin(psi)
+# a_sym = px / r
+# b_sym = py / r
 
-# Scalar dot product
-dot_pm = a_sym * m1 + b_sym * m2
+# # Scalar dot product
+# dot_pm = a_sym * m1 + b_sym * m2
 
-# Outer products (manual scalars)
-ppT = sp.Matrix([[a_sym * a_sym, a_sym * b_sym],
-                 [b_sym * a_sym, b_sym * b_sym]])
+# # Outer products (manual scalars)
+# ppT = sp.Matrix([[a_sym * a_sym, a_sym * b_sym],
+#                  [b_sym * a_sym, b_sym * b_sym]])
 
-pmT = sp.Matrix([[a_sym * m1, a_sym * m2],
-                 [b_sym * m1, b_sym * m2]])
+# pmT = sp.Matrix([[a_sym * m1, a_sym * m2],
+#                  [b_sym * m1, b_sym * m2]])
 
-mpT = sp.Matrix([[m1 * a_sym, m1 * b_sym],
-                 [m2 * a_sym, m2 * b_sym]])
+# mpT = sp.Matrix([[m1 * a_sym, m1 * b_sym],
+#                  [m2 * a_sym, m2 * b_sym]])
 
-I2 = sp.eye(2)
-Z = I2 - 5 * ppT
+# I2 = sp.eye(2)
+# Z = I2 - 5 * ppT
 
-grad_b_explicit = C_grad * (
-    pmT + dot_pm * I2 + Z * mpT
-)
+# grad_b_explicit = C_grad * (
+#     pmT + dot_pm * I2 + Z * mpT
+# )
 
-Rm = sp.Matrix([sp.cos(theta), sp.sin(theta)])
-dx_dtheta = sp.Matrix([-sp.sin(theta), sp.cos(theta)])
+# Rm = sp.Matrix([sp.cos(theta), sp.sin(theta)])
+# dx_dtheta = sp.Matrix([-sp.sin(theta), sp.cos(theta)])
 
-# Second term
-second_term_expr_explicit = sp.simplify((grad_b_explicit.T * Rm).dot(dx_dtheta))
-
-# Lambdify
-f_second_term = sp.lambdify(
-    (theta, x, y, x_m, y_m, psi, C_grad),
-    second_term_expr_explicit,
-    modules='numpy'
-)
+# # Second term
+# second_term_expr_explicit = sp.simplify((grad_b_explicit.T * Rm).dot(dx_dtheta))
+# print("Solve second term1")
+# # Lambdify
+# f_second_term = sp.lambdify(
+#     (theta, x, y, x_m, y_m, psi, C_grad),
+#     second_term_expr_explicit,
+#     modules='numpy'
+# )
+# print("Solve second term2")
 def compute_dF_dtheta_symbolic(theta_val, x_val, y_val, magnet_pos, magnet_dipole_angle):
     x_m, y_m = magnet_pos
     px = x_val - x_m
@@ -220,7 +222,10 @@ def compute_dF_dtheta_symbolic(theta_val, x_val, y_val, magnet_pos, magnet_dipol
 
     # Field constant
     C_val = MU0 * MAGNET_M / (4 * np.pi * r_mag**3)
+    import dill as pickle
 
+    with open('magnetic_field_terms.pkl', 'rb') as f:
+        f_first_term, f_second_term = pickle.load(f)
     # First term (symbolically lambdified)
     first_term = f_first_term(theta_val, x_val, y_val, x_m, y_m, magnet_dipole_angle, C_val)
     # print("First term:", first_term)
@@ -239,18 +244,128 @@ def compute_dF_dtheta_symbolic(theta_val, x_val, y_val, magnet_pos, magnet_dipol
     # Second term (symbolically lambdified)
     second_term = f_second_term(theta_val, x_val, y_val, x_m, y_m, magnet_dipole_angle, C_val)
     # print("Second term:", second_term)
-    fd_second_term = finite_difference_second_term(theta_val, x_val, y_val, x_m, y_m, magnet_dipole_angle)
+    # fd_second_term = finite_difference_second_term(theta_val, x_val, y_val, x_m, y_m, magnet_dipole_angle)
     # print("Finite-difference second term:", fd_second_term)
     
     # Total derivative
 
     total_symbolic = first_term + second_term
-    fd_total = total_finite_difference(theta_val, x_val, y_val, x_m, y_m, magnet_dipole_angle)
+    # fd_total = total_finite_difference(theta_val, x_val, y_val, x_m, y_m, magnet_dipole_angle)
     # print("Total symbolic derivative:", total_symbolic)
     # print("Total finite difference:", fd_total)
     # print("Absolute error:", abs(total_symbolic - fd_total))
 
     return total_symbolic
+
+def solve_deflection_angle_newton_safe(magnet_pos, magnet_dipole_angle, n_steps=1000):
+    ds = L / n_steps
+    max_newton_iters = 100
+
+    # --- Bracketing method to find a good initial guess ---
+    def integrate_curvature(k0):
+
+        theta = 0.0
+        dtheta = k0
+        x = y = 0.0
+        for _ in range(n_steps):
+            ddtheta = -(A * M / (E * I)) * compute_dF_dtheta_symbolic(theta, x, y, magnet_pos, magnet_dipole_angle)
+            dx = np.cos(theta)
+            dy = np.sin(theta)
+            theta += dtheta * ds
+            dtheta += ddtheta * ds
+            x += dx * ds
+            y += dy * ds
+
+        return dtheta  # return θ'(L)
+
+    # Bracket the root
+    k0_low, k0_high = 0.0, 50.0
+    res_low = integrate_curvature(k0_low)
+    res_high = integrate_curvature(k0_high)
+
+    attempts = 0
+    while res_low * res_high > 0:
+
+        k0_low = k0_high
+        res_low = res_high
+        k0_high *= 2
+        res_high = integrate_curvature(k0_high)
+        attempts += 1
+        if attempts > 100:
+            print("[WARNING] No sign change in integrate_curvature. Switching to fallback k0 range.")
+            k0_low, k0_high = -50, 50
+            res_low = integrate_curvature(k0_low)
+            res_high = integrate_curvature(k0_high)
+            break
+
+    # Use midpoint as Newton initial guess
+    v = 0.5 * (k0_low + k0_high)
+
+    # --- Newton iteration ---
+    def integrate_state_and_sensitivity(v):
+        theta = 0.0
+        dtheta = v
+        z = 0.0
+        dz = 1.0
+        x = y = 0.0
+        for _ in range(n_steps):
+            dF_dtheta = compute_dF_dtheta_symbolic(theta, x, y, magnet_pos, magnet_dipole_angle)
+            ddtheta = -(A * M / (E * I)) * dF_dtheta
+            # Finite difference to approximate derivative of ddtheta
+            dF_dtheta_eps = compute_dF_dtheta_symbolic(theta + 1e-6, x, y, magnet_pos, magnet_dipole_angle)
+            dddtheta_dtheta = -(A * M / (E * I)) * (dF_dtheta_eps - dF_dtheta) / 1e-6
+            # Integrate θ and sensitivity z = ∂θ/∂v
+            theta += dtheta * ds
+            dtheta += ddtheta * ds
+            z += dz * ds
+            dz += dddtheta_dtheta * z * ds
+            # Integrate position
+            dx = math.cos(theta)
+            dy = math.sin(theta)
+            x += dx * ds
+            y += dy * ds
+        return theta, dtheta, z, dz
+
+    success = False
+    for _ in range(max_newton_iters):
+
+        theta_L, dtheta_L, z_L, dz_L = integrate_state_and_sensitivity(v)
+        residual = dtheta_L
+        if abs(residual) < 1e-6:
+            success = True
+            break
+        if abs(dz_L) < 1e-6:
+            print("[WARNING] Newton step sensitivity too small. Aborting Newton updates.")
+            break
+        v -= residual / dz_L
+        # print(f"[DEBUG] Iter {_}: v = {v:.6f}, dtheta_L = {dtheta_L:.6e}, dz_L = {dz_L:.6e}")
+
+    if not success:
+        print("[WARNING] Newton did not converge. Falling back to v = 1.0")
+        v = 1.0
+
+    # --- Final integration to extract the curve ---
+    theta = 0.0
+    dtheta = v
+    x = y = 0.0
+    theta_vals = [theta]
+    x_vals = [x]
+    y_vals = [y]
+    for _ in range(n_steps):
+        ddtheta = -(A * M / (E * I)) * compute_dF_dtheta_symbolic(theta, x, y, magnet_pos, magnet_dipole_angle)
+        theta += dtheta * ds
+        dtheta += ddtheta * ds
+        dx = math.cos(theta)
+        dy = math.sin(theta)
+        x += dx * ds
+        y += dy * ds
+        theta_vals.append(theta)
+        x_vals.append(x)
+        y_vals.append(y)
+
+    s_vals = [i * ds for i in range(len(theta_vals))]
+    return s_vals, theta_vals, x_vals, y_vals
+
 
 # --- Step 3: Updated deflection solver using full symbolic dF/dtheta ---
 def solve_deflection_angle(magnet_pos, magnet_dipole_angle, n_steps = 1000):
@@ -290,8 +405,6 @@ def solve_deflection_angle(magnet_pos, magnet_dipole_angle, n_steps = 1000):
             res_low = integrate_curvature(k0_low)
             res_high = integrate_curvature(k0_high)
             break
-
-        res_high = integrate_curvature(k0_high)
     # Use secant method to find root k0 such that θ'(L) ≈ 0
     k0_a, k0_b = k0_low, k0_high
     res_a, res_b = res_low, res_high
@@ -414,7 +527,7 @@ def rotate_vector(v, axis, angle_rad):
     return v_rot
 
 # Original 3D magnet position
-magnet_3d = np.array([0.1, 0.1, 0.06])  # x, y, z
+magnet_3d = np.array([0.08, 0.03, 0.0])  # x, y, z
 catheter_base = np.array([0.05, 0.0, 0.0])
 
 phi = compute_phi_from_yz(magnet_3d[1], magnet_3d[2])
@@ -424,14 +537,22 @@ magnet_2d = project_magnet_to_2d(magnet_3d[0], magnet_3d[1], magnet_3d[2])
 
 # Step 3: Solve in 2D
 # psi = np.arctan2(magnet_2d[1] - 0.0, magnet_2d[0] - 0.0)
-delta = np.deg2rad(180)  # or any desired angle in radians
+delta = np.deg2rad(0)  # or any desired angle in radians
 
 psi = np.arctan2(magnet_2d[1], magnet_2d[0]) + delta
 
-s_vals, theta_vals, x_vals, y_vals = solve_deflection_angle(magnet_2d, psi)
+s_vals, theta_vals, x_vals, y_vals = solve_deflection_angle_newton_safe(magnet_2d, psi)
 
 # Step 4: Rotate the 2D result back into 3D
 path_3d = rotate_2d_to_3d(x_vals, y_vals, phi)
+# Print final bending angle (in degrees)
+final_bending_rad = theta_vals[-1]
+final_bending_deg = np.rad2deg(final_bending_rad)
+print(f"Final bending angle θ(L): {final_bending_deg:.3f} degrees")
+
+# Print final position in 3D (x, y, z)
+final_position_3d = path_3d[-1]
+print(f"Final tip position: x = {final_position_3d[0]:.4f}, y = {final_position_3d[1]:.4f}, z = {final_position_3d[2]:.4f}")
 
 # Plot the result
 import matplotlib.pyplot as plt
