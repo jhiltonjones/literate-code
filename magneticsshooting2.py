@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 # Parameters for MSCR #1 (length, radius, modulus, magnetization)
-L = 0.08  # rod length in meters (24 mm)
-r = 0.00054  # rod radius in meters (0.54 mm)
+L = 0.12  # rod length in meters (24 mm)
+r = 0.001  # rod radius in meters (0.54 mm)
 E = 3.0e6   # Young's modulus in Pascals (3.0 MPa)
 # M = 8000.0  # magnetization in A/m (8.0 kA/m)
 # pos1 = 0.05
@@ -19,8 +19,8 @@ I = math.pi * r**4 / 4.0
 MU0 = 4 * math.pi * 1e-7      # vacuum permeability (μ0)
 M = 8000
 
-MAGNET_M = 318           # magnet's dipole moment magnitude (A·m^2), calibrated for the N52 magnet
-magnet_position = np.array([-0.02, 0.15])
+MAGNET_M = 246          # magnet's dipole moment magnitude (A·m^2), calibrated for the N52 magnet
+magnet_position = np.array([0.06, 0.15])
 import numpy as np
 
 def compute_phi_from_yz(y_mag, z_mag):
@@ -220,18 +220,33 @@ def solve_deflection_angle(magnet_pos, magnet_dipole_angle, n_steps = 1000):
         n_steps = 1000
         ds = L / n_steps
         for _ in range(n_steps):
-            # if _ < n_steps // 2:
-            #     local_dipole_angle = magnet_dipole_angle  
-            # else:
-            #     local_dipole_angle = magnet_dipole_angle + np.pi # -x direction
-            if _ < n_steps // 4:
-                local_dipole_angle = magnet_dipole_angle  # No magnetization
-            elif _ < 2 * n_steps // 4:
-                local_dipole_angle = magnet_dipole_angle   # +x direction
-            elif _ < 3 * n_steps // 4:
-                local_dipole_angle = magnet_dipole_angle +np.pi # +x direction
+            if _ < n_steps // 6:
+                local_dipole_angle = None  # No magnetization
+            elif _ < 2 * n_steps // 6:
+                local_dipole_angle = None  # +x direction
+            elif _ < 3 * n_steps // 6:
+                local_dipole_angle = magnet_dipole_angle  # +x direction
+            elif _ < 4 * n_steps // 6:
+                local_dipole_angle = magnet_dipole_angle  # +x direction
+            elif _ < 5 * n_steps // 6:
+                local_dipole_angle = magnet_dipole_angle  # +x direction
             else:
                 local_dipole_angle = magnet_dipole_angle +np.pi # -x direction
+            # if _ < n_steps // 3:
+            #     local_dipole_angle = None 
+            # elif _ < 2 * n_steps // 3:
+            #      local_dipole_angle = magnet_dipole_angle  # +x direction
+            # else:
+            #     local_dipole_angle = magnet_dipole_angle + np.pi # -x direction
+
+            # if _ < n_steps // 4:
+            #     local_dipole_angle = magnet_dipole_angle  # No magnetization
+            # elif _ < 2 * n_steps // 4:
+            #     local_dipole_angle = magnet_dipole_angle  # +x direction
+            # elif _ < 3 * n_steps // 4:
+            #     local_dipole_angle = magnet_dipole_angle +np.pi # +x direction
+            # else:
+            #     local_dipole_angle = magnet_dipole_angle +np.pi # -x direction
             
             if local_dipole_angle is None:
                 ddtheta = 0.0  # No torque applied
@@ -299,18 +314,33 @@ def solve_deflection_angle(magnet_pos, magnet_dipole_angle, n_steps = 1000):
     x_vals = [x]
     y_vals = [y]
     for i in range(n_steps):
-        # if _ < n_steps // 2:
-        #     local_dipole_angle = magnet_dipole_angle 
-        # else:
-        #     local_dipole_angle = magnet_dipole_angle + np.pi  # -x direction
-        if _ < n_steps // 4:
-            local_dipole_angle = magnet_dipole_angle # No magnetization
-        elif _ < 2 * n_steps // 4:
-            local_dipole_angle = magnet_dipole_angle# +x direction
-        elif _ < 3 * n_steps // 4:
-            local_dipole_angle = magnet_dipole_angle  +np.pi  # +x direction
+        if  i < n_steps // 6:
+            local_dipole_angle = None  # No magnetization
+        elif i < 2 * n_steps // 6:
+            local_dipole_angle = None  # +x direction
+        elif i < 3 * n_steps // 6:
+            local_dipole_angle = magnet_dipole_angle  # +x direction
+        elif i < 4 * n_steps // 6:
+            local_dipole_angle = magnet_dipole_angle  # +x direction
+        elif i < 5 * n_steps // 6:
+            local_dipole_angle = magnet_dipole_angle  # +x direction
         else:
             local_dipole_angle = magnet_dipole_angle +np.pi # -x direction
+        # if _ < n_steps // 3:
+        #     local_dipole_angle = None  
+        # elif _ < 2 * n_steps // 3:
+        #         local_dipole_angle = magnet_dipole_angle  # +x direction
+        # else:
+        #     local_dipole_angle = magnet_dipole_angle + np.pi # -x direction
+
+        # if _ < n_steps // 4:
+        #     local_dipole_angle = magnet_dipole_angle# No magnetization
+        # elif _ < 2 * n_steps // 4:
+        #     local_dipole_angle = magnet_dipole_angle # +x direction
+        # elif _ < 3 * n_steps // 4:
+        #     local_dipole_angle = magnet_dipole_angle +np.pi # +x direction
+        # else:
+        #     local_dipole_angle = magnet_dipole_angle +np.pi # -x direction
         
         if local_dipole_angle is None:
             ddtheta = 0.0  # No torque applied
@@ -329,195 +359,196 @@ def solve_deflection_angle(magnet_pos, magnet_dipole_angle, n_steps = 1000):
     s_vals = [i * ds for i in range(len(theta_vals))]
     return s_vals, theta_vals, x_vals, y_vals
 
-# Original 3D magnet position
-magnet_3d = np.array([0.02, 0.2, 0.05])  # x, y, z
-catheter_base = np.array([0.08, 0.0, 0.0])
+# # Original 3D magnet position
+# magnet_3d = np.array([0.02, 0.2, 0.0])  # x, y, z
+# catheter_base = np.array([0.08, 0.0, 0.0])
 
-phi = compute_phi_from_yz(magnet_3d[1], magnet_3d[2])
+# phi = compute_phi_from_yz(magnet_3d[1], magnet_3d[2])
 
-# Step 2: Project 3D magnet into 2D solver plane
-magnet_2d = project_magnet_to_2d(magnet_3d[0], magnet_3d[1], magnet_3d[2])
+# # Step 2: Project 3D magnet into 2D solver plane
+# magnet_2d = project_magnet_to_2d(magnet_3d[0], magnet_3d[1], magnet_3d[2])
 
-# Step 3: Solve in 2D
-# psi = np.arctan2(magnet_2d[1] - 0.0, magnet_2d[0] - 0.0)
-delta = np.deg2rad(0)  # or any desired angle in radians
+# # Step 3: Solve in 2D
+# # psi = np.arctan2(magnet_2d[1] - 0.0, magnet_2d[0] - 0.0)
+# delta = np.deg2rad(0)  # or any desired angle in radians
 
-psi = np.arctan2(magnet_3d[1] - catheter_base[1], magnet_3d[0] - catheter_base[0])
-magnet_2d = np.array([magnet_3d[0], magnet_3d[1]])
+# psi = np.arctan2(magnet_3d[1] - catheter_base[1], magnet_3d[0] - catheter_base[0])
+# magnet_2d = np.array([magnet_3d[0], magnet_3d[1]])
 
-s_vals, theta_vals, x_vals, y_vals = solve_deflection_angle(magnet_2d, psi)
+# s_vals, theta_vals, x_vals, y_vals = solve_deflection_angle(magnet_2d, psi)
 
-# Tip position
-print(f"Tip position (2D only): x = {x_vals[-1]:.4f}, y = {y_vals[-1]:.4f}")
-print(f"Bending θ(L): {np.rad2deg(theta_vals[-1]):.3f}°")
+# # Tip position
+# print(f"Tip position (2D only): x = {x_vals[-1]:.4f}, y = {y_vals[-1]:.4f}")
+# print(f"Bending θ(L): {np.rad2deg(theta_vals[-1]):.3f}°")
 
-# Step 4: Rotate the 2D result back into 3D
-path_3d = rotate_2d_to_3d(x_vals, y_vals, phi)
+# # Step 4: Rotate the 2D result back into 3D
+# path_3d = rotate_2d_to_3d(x_vals, y_vals, phi)
 
-# Print final bending angle (in degrees)
-final_bending_rad = theta_vals[-1]
-final_bending_deg = np.rad2deg(final_bending_rad)
-print(f"Final bending angle θ(L): {final_bending_deg:.3f} degrees")
-
-# Print final position in 3D (x, y, z)
-final_position_3d = path_3d[-1]
-print(f"Final tip position: x = {final_position_3d[0]:.4f}, y = {final_position_3d[1]:.4f}, z = {final_position_3d[2]:.4f}")
-
-# Plot the result
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-import numpy as np  # Ensure this is imported if not already
-
-fig = plt.figure()
-ax = fig.add_subplot(projection='3d')
-ax.plot(path_3d[:, 0], path_3d[:, 1], path_3d[:, 2], label="Deflected Shape")
-
-# Magnet
-ax.scatter(*magnet_3d, color='red', s=50, label="Magnet", marker='X')
-
-# Highlight base (first point)
-ax.scatter(*path_3d[0], color='blue', s=60, label='Base', marker='o')
-
-# Highlight tip (last point)
-ax.scatter(*path_3d[-1], color='green', s=60, label='Tip', marker='^')
-
-ax.set_xlabel("X")
-ax.set_ylabel("Y")
-ax.set_zlabel("Z")
-ax.legend()
-
-def set_axes_equal(ax):
-    '''Make 3D plot axes have equal scale.'''
-    limits = np.array([
-        ax.get_xlim3d(),
-        ax.get_ylim3d(),
-        ax.get_zlim3d(),
-    ])
-    spans = limits[:, 1] - limits[:, 0]
-    centers = np.mean(limits, axis=1)
-    max_span = max(spans)
-
-    new_limits = np.array([
-        center - max_span / 2 for center in centers
-    ]), np.array([
-        center + max_span / 2 for center in centers
-    ])
-    
-    ax.set_xlim3d(new_limits[0][0], new_limits[1][0])
-    ax.set_ylim3d(new_limits[0][1], new_limits[1][1])
-    ax.set_zlim3d(new_limits[0][2], new_limits[1][2])
-
-set_axes_equal(ax)
-plt.tight_layout()
-plt.show()
-
-# magnet_position = np.array([0.02, 0.2])  # ✅ make it a NumPy array
-# print(f"Magnet position: {magnet_position}")
-
-# catheter_pos = np.array([0.08, 0.0])  # Catheter starts at base
-
-# # Direction vector from catheter to magnet
-# direction = magnet_position - catheter_pos
-
-# Compute angle in radians and degrees
-# angle_rad = np.arctan2(direction[1], direction[0])
-# angle_deg = np.rad2deg(angle_rad)
-
-# psi = angle_rad  # Align magnetic dipole toward catheter
-# print(f"Angle of external magnet ψ: {angle_deg:.2f} degrees")
-
-# Solve deflection
-# s_vals, theta_vals, x_vals, y_vals = solve_deflection_angle(magnet_position, psi)
-
-# Final bending angle
+# # Print final bending angle (in degrees)
 # final_bending_rad = theta_vals[-1]
 # final_bending_deg = np.rad2deg(final_bending_rad)
 # print(f"Final bending angle θ(L): {final_bending_deg:.3f} degrees")
 
-# # Final tip position
-# print(f"Final tip position: x = {x_vals[-1]:.4f}, y = {y_vals[-1]:.4f}")
+# # Print final position in 3D (x, y, z)
+# final_position_3d = path_3d[-1]
+# print(f"Final tip position: x = {final_position_3d[0]:.4f}, y = {final_position_3d[1]:.4f}, z = {final_position_3d[2]:.4f}")
+
+# # Plot the result
+# import matplotlib.pyplot as plt
+# from mpl_toolkits.mplot3d import Axes3D
+# import numpy as np  # Ensure this is imported if not already
+
+# fig = plt.figure()
+# ax = fig.add_subplot(projection='3d')
+# ax.plot(path_3d[:, 0], path_3d[:, 1], path_3d[:, 2], label="Deflected Shape")
+
+# # Magnet
+# ax.scatter(*magnet_3d, color='red', s=50, label="Magnet", marker='X')
+
+# # Highlight base (first point)
+# ax.scatter(*path_3d[0], color='blue', s=60, label='Base', marker='o')
+
+# # Highlight tip (last point)
+# ax.scatter(*path_3d[-1], color='green', s=60, label='Tip', marker='^')
+
+# ax.set_xlabel("X")
+# ax.set_ylabel("Y")
+# ax.set_zlabel("Z")
+# ax.legend()
+
+# def set_axes_equal(ax):
+#     '''Make 3D plot axes have equal scale.'''
+#     limits = np.array([
+#         ax.get_xlim3d(),
+#         ax.get_ylim3d(),
+#         ax.get_zlim3d(),
+#     ])
+#     spans = limits[:, 1] - limits[:, 0]
+#     centers = np.mean(limits, axis=1)
+#     max_span = max(spans)
+
+#     new_limits = np.array([
+#         center - max_span / 2 for center in centers
+#     ]), np.array([
+#         center + max_span / 2 for center in centers
+#     ])
+    
+#     ax.set_xlim3d(new_limits[0][0], new_limits[1][0])
+#     ax.set_ylim3d(new_limits[0][1], new_limits[1][1])
+#     ax.set_zlim3d(new_limits[0][2], new_limits[1][2])
+
+# set_axes_equal(ax)
+# plt.tight_layout()
+# plt.show()
+
+# magnet_position = np.array([0.02, 0.15])  # ✅ make it a NumPy array
+print(f"Magnet position: {magnet_position}")
+
+catheter_pos = np.array([0.12, 0.0])  # Catheter starts at base
+
+# Direction vector from catheter to magnet
+direction = magnet_position - catheter_pos
+
+# Compute angle in radians and degrees
+angle_rad = np.arctan2(direction[1], direction[0])
+angle_deg = np.rad2deg(angle_rad)
+
+# psi = angle_rad   # Align magnetic dipole toward catheter
+psi = np.deg2rad(90)
+print(f"Angle of external magnet ψ: {angle_deg:.2f} degrees")
+
+# Solve deflection
+s_vals, theta_vals, x_vals, y_vals = solve_deflection_angle(magnet_position, psi)
+
+# Final bending angle
+final_bending_rad = theta_vals[-1]
+final_bending_deg = np.rad2deg(final_bending_rad)
+print(f"Final bending angle θ(L): {final_bending_deg:.3f} degrees")
+
+# Final tip position
+print(f"Final tip position: x = {x_vals[-1]:.4f}, y = {y_vals[-1]:.4f}")
 
 # print("phi (rotation back angle):", phi)
 # print("magnet_2d:", magnet_2d)
-# print("psi from 3D projection:", psi)
-# # print("psi from 2D direction:", angle_rad)
+print("psi from 3D projection:", psi)
+# print("psi from 2D direction:", angle_rad)
 
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
-# plt.figure(figsize=(6, 6))
+plt.figure(figsize=(6, 6))
 
-# # Plot catheter deformation
-# plt.plot(x_vals, y_vals, linewidth=2, label=f'ψ = {math.degrees(psi):.1f}°')
+# Plot catheter deformation
+plt.plot(x_vals, y_vals, linewidth=2, label=f'ψ = {math.degrees(psi):.1f}°')
 
-# # Plot magnet position
-# plt.scatter(magnet_position[0], magnet_position[1], color='red', s=80, label='Magnet')
+# Plot magnet position
+plt.scatter(magnet_position[0], magnet_position[1], color='red', s=80, label='Magnet')
 
-# # Add label with coordinates
-# plt.text(
-#     magnet_position[0] + 0.002,  # slight x offset to avoid overlap
-#     magnet_position[1] + 0.002,  # slight y offset
-#     f'Magnet\n({magnet_position[0]:.3f}, {magnet_position[1]:.3f})',
-#     color='red',
-#     fontsize=9,
-#     va='bottom',
-#     ha='left'
-# )
+# Add label with coordinates
+plt.text(
+    magnet_position[0] + 0.002,  # slight x offset to avoid overlap
+    magnet_position[1] + 0.002,  # slight y offset
+    f'Magnet\n({magnet_position[0]:.3f}, {magnet_position[1]:.3f})',
+    color='red',
+    fontsize=9,
+    va='bottom',
+    ha='left'
+)
 
-# # Axes and styling
-# plt.xlabel('x (m)')
-# plt.ylabel('y (m)')
-# plt.title('MSCR Deformation Under Magnetic Actuation')
-# plt.axis('equal')
-# plt.grid(True)
-# plt.legend()
-# plt.tight_layout()
-# plt.show()
+# Axes and styling
+plt.xlabel('x (m)')
+plt.ylabel('y (m)')
+plt.title('MSCR Deformation Under Magnetic Actuation')
+plt.axis('equal')
+plt.grid(True)
+plt.legend()
+plt.tight_layout()
+plt.show()
 
-# import numpy as np
-# import matplotlib.pyplot as plt
-# import math
+import numpy as np
+import matplotlib.pyplot as plt
+import math
 
-# plt.figure(figsize=(8, 6))
+plt.figure(figsize=(8, 6))
 
-# # Loop through psi from -90° to 90° in steps of 20°
-# for deg in range(0, 360, 20):
-#     psi = math.radians(deg)
-#     print(f"\nψ = {deg}°")
+# Loop through psi from -90° to 90° in steps of 20°
+for deg in range(0, 360, 30):
+    psi = math.radians(deg)
+    print(f"\nψ = {deg}°")
 
-#     # Compute deflection and Jacobian
-#     s_vals, theta_vals, x_vals, y_vals = solve_deflection_angle(magnet_position, psi)
+    # Compute deflection and Jacobian
+    s_vals, theta_vals, x_vals, y_vals = solve_deflection_angle(magnet_position, psi)
 
-#     tip_angle = theta_vals[-1]
+    tip_angle = theta_vals[-1]
 
-#     print(f"  Tip deflection angle θ(L) = {np.rad2deg(tip_angle):.2f}°")
+    print(f"  Tip deflection angle θ(L) = {np.rad2deg(tip_angle):.2f}°")
 
-#     # Plot the catheter deformation for this ψ
-#     plt.plot(x_vals, y_vals, label=f'ψ = {deg}°')
-#     # Add small label at the tip of the curve
-#     tip_x, tip_y = x_vals[-1], y_vals[-1]
-#     plt.text(tip_x + 0.001, tip_y + 0.001, f'{deg}°', fontsize=8, alpha=0.8)
+    # Plot the catheter deformation for this ψ
+    plt.plot(x_vals, y_vals, label=f'ψ = {deg}°')
+    # Add small label at the tip of the curve
+    tip_x, tip_y = x_vals[-1], y_vals[-1]
+    plt.text(tip_x + 0.001, tip_y + 0.001, f'{deg}°', fontsize=8, alpha=0.8)
 
-# # Plot magnet position
-# plt.scatter(magnet_position[0], magnet_position[1], color='red', s=80, label='Magnet')
+# Plot magnet position
+plt.scatter(magnet_position[0], magnet_position[1], color='red', s=80, label='Magnet')
 
-# # Add label with coordinates
-# plt.text(
-#     magnet_position[0] + 0.002,  # slight x offset to avoid overlap
-#     magnet_position[1] + 0.002,  # slight y offset
-#     f'Magnet\n({magnet_position[0]:.3f}, {magnet_position[1]:.3f})',
-#     color='red',
-#     fontsize=9,
-#     va='bottom',
-#     ha='left'
-# )
+# Add label with coordinates
+plt.text(
+    magnet_position[0] + 0.002,  # slight x offset to avoid overlap
+    magnet_position[1] + 0.002,  # slight y offset
+    f'Magnet\n({magnet_position[0]:.3f}, {magnet_position[1]:.3f})',
+    color='red',
+    fontsize=9,
+    va='bottom',
+    ha='left'
+)
 
-# # Final plot styling
-# plt.xlabel('x (m)')
-# plt.ylabel('y (m)')
-# plt.title('MSCR Deformation for Various Magnet Orientations at Magnet position')
-# plt.axis('equal')
-# plt.grid(True)
-# plt.legend()
-# plt.tight_layout()
-# plt.show()
+# Final plot styling
+plt.xlabel('x (m)')
+plt.ylabel('y (m)')
+plt.title('MSCR Deformation for Various Magnet Orientations at Magnet position')
+plt.axis('equal')
+plt.grid(True)
+plt.legend()
+plt.tight_layout()
+plt.show()
 
