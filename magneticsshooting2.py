@@ -19,8 +19,8 @@ I = math.pi * r**4 / 4.0
 MU0 = 4 * math.pi * 1e-7      # vacuum permeability (μ0)
 M = 8000
 
-MAGNET_M = 246          # magnet's dipole moment magnitude (A·m^2), calibrated for the N52 magnet
-magnet_position = np.array([0.06, 0.15])
+MAGNET_M = 346          # magnet's dipole moment magnitude (A·m^2), calibrated for the N52 magnet
+magnet_position = np.array([0.06, 0.14])
 import numpy as np
 
 def compute_phi_from_yz(y_mag, z_mag):
@@ -229,7 +229,7 @@ def solve_deflection_angle(magnet_pos, magnet_dipole_angle, n_steps = 1000):
             elif _ < 4 * n_steps // 6:
                 local_dipole_angle = magnet_dipole_angle  # +x direction
             elif _ < 5 * n_steps // 6:
-                local_dipole_angle = magnet_dipole_angle  # +x direction
+                local_dipole_angle = magnet_dipole_angle +np.pi # +x direction
             else:
                 local_dipole_angle = magnet_dipole_angle +np.pi # -x direction
             # if _ < n_steps // 3:
@@ -323,7 +323,7 @@ def solve_deflection_angle(magnet_pos, magnet_dipole_angle, n_steps = 1000):
         elif i < 4 * n_steps // 6:
             local_dipole_angle = magnet_dipole_angle  # +x direction
         elif i < 5 * n_steps // 6:
-            local_dipole_angle = magnet_dipole_angle  # +x direction
+            local_dipole_angle = magnet_dipole_angle +np.pi # +x direction
         else:
             local_dipole_angle = magnet_dipole_angle +np.pi # -x direction
         # if _ < n_steps // 3:
@@ -454,7 +454,7 @@ angle_rad = np.arctan2(direction[1], direction[0])
 angle_deg = np.rad2deg(angle_rad)
 
 # psi = angle_rad   # Align magnetic dipole toward catheter
-psi = np.deg2rad(90)
+psi = np.deg2rad(45)
 print(f"Angle of external magnet ψ: {angle_deg:.2f} degrees")
 
 # Solve deflection

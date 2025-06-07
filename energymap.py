@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import os
 
-output_folder = "figures_output50.2_deflect"
+output_folder = "figures_output60.2_deflect"
 os.makedirs(output_folder, exist_ok=True)
 
 
@@ -99,9 +99,9 @@ def solve_deflection_angle_energy(magnet_pos, magnet_dipole_angle, n_steps = 100
             # else:
             #     local_dipole_angle = magnet_dipole_angle + np.pi # -x direction
             if _ < n_steps // 4:
-                local_dipole_angle = magnet_dipole_angle +np.pi  # No magnetization
+                local_dipole_angle = magnet_dipole_angle   # No magnetization
             elif _ < 2 * n_steps // 4:
-                local_dipole_angle = magnet_dipole_angle +np.pi  # +x direction
+                local_dipole_angle = magnet_dipole_angle  # +x direction
             elif _ < 3 * n_steps // 4:
                 local_dipole_angle = magnet_dipole_angle   # +x direction
             else:
@@ -182,9 +182,9 @@ def solve_deflection_angle_energy(magnet_pos, magnet_dipole_angle, n_steps = 100
         # else:
         #     local_dipole_angle = magnet_dipole_angle + np.pi  # -x direction
         if i < n_steps // 4:
-            local_dipole_angle = magnet_dipole_angle +np.pi  # No magnetization
+            local_dipole_angle = magnet_dipole_angle   # No magnetization
         elif i < 2 * n_steps // 4:
-            local_dipole_angle = magnet_dipole_angle +np.pi  # +x direction
+            local_dipole_angle = magnet_dipole_angle   # +x direction
         elif i < 3 * n_steps // 4:
             local_dipole_angle = magnet_dipole_angle  # +x direction
         else:

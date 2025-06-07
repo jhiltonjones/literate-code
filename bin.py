@@ -1,43 +1,63 @@
-import numpy as np
-import matplotlib.pyplot as plt
+import jax
+import jax.numpy as jnp
+from jax.experimental.ode import odeint
 
-# Define a toy function to mimic ε(k0) = θ'(L; k0)
-def epsilon(k0):
-    return np.sin(k0) - 0.5  # Root when sin(k0) = 0.5
+# Constants
+L = 0.05  # rod length in meters
+r = 0.00054
+E = 3.0e6
+A = jnp.pi * r**2
+I = jnp.pi * r**4 / 4.0
+MU0 = 4 * jnp.pi * 1e-7
+M = 8000
+MAGNET_M = 318
 
-# Setup initial guesses
-k0_vals = np.linspace(0, 10, 500)
-eps_vals = epsilon(k0_vals)
+# Beam ODE definition
+def dF_dtheta(theta, x, y, x_m, y_m, psi):
+    px = x - x_m
+    py = y - y_m
+    r2 = px**2 + py**2
+    r = jnp.sqrt(r2 + 1e-10)  # avoid zero division
+    C_val = MU0 * MAGNET_M / (4 * jnp.pi * r**3)
 
-# Initial bracket values
-k0_low = 0.0
-k0_high = 1.0
-res_low = epsilon(k0_low)
-res_high = epsilon(k0_high)
+    a = px / r
+    b = py / r
+    m_hat = jnp.array([jnp.cos(psi), jnp.sin(psi)])
+    p_hat = jnp.array([a, b])
+    dot_pm = jnp.dot(p_hat, m_hat)
+    b_vec = C_val * (3 * dot_pm * p_hat - m_hat)
 
-# Store the brackets and evaluated points
-bracket_progress = [(k0_low, res_low), (k0_high, res_high)]
+    m_local = jnp.array([jnp.cos(theta), jnp.sin(theta)])
+    dR_dtheta = jnp.array([-jnp.sin(theta), jnp.cos(theta)])
+    return jnp.dot(dR_dtheta, b_vec)
 
-# Expand until sign change is found
-attempts = 0
-while res_low * res_high > 0 and attempts < 10:
-    k0_low = k0_high
-    res_low = res_high
-    k0_high *= 2
-    res_high = epsilon(k0_high)
-    bracket_progress.append((k0_high, res_high))
-    attempts += 1
+def beam_ode(state, s, magnet_params):
+    theta, dtheta, x, y = state
+    x_m, y_m, psi = magnet_params
+    ddtheta = -(A * M / (E * I)) * dF_dtheta(theta, x, y, x_m, y_m, psi)
+    dx = jnp.cos(theta)
+    dy = jnp.sin(theta)
+    return jnp.array([dtheta, ddtheta, dx, dy])
 
-# Plot the function and the bracketing process
-plt.figure(figsize=(10, 5))
-plt.plot(k0_vals, eps_vals, label=r"$\varepsilon(k_0) = \sin(k_0) - 0.5$")
-plt.axhline(0, color='gray', linestyle='--')
-for i, (k, v) in enumerate(bracket_progress):
-    plt.plot(k, v, 'o', label=f'Attempt {i}: k0={k:.2f}, ε={v:.2f}')
-plt.xlabel(r"$k_0$")
-plt.ylabel(r"$\varepsilon(k_0)$")
-plt.title("Bracketing ε(k₀) to Find Root")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.show()
+# Integration wrapper
+def solve_beam(x_m, y_m, psi, k0_init=0.0, N=1000):
+    s_vals = jnp.linspace(0, L, N)
+    init_state = jnp.array([0.0, k0_init, 0.0, 0.0])
+    sol = odeint(beam_ode, init_state, s_vals, jnp.array([x_m, y_m, psi]))
+    theta_vals = sol[:, 0]
+    return s_vals, theta_vals
+
+# Jacobian computation
+def theta_L_from_params(params):
+    x_m, y_m, psi = params
+    s_vals, theta_vals = solve_beam(x_m, y_m, psi)
+    return theta_vals[-1]
+
+grad_theta_L = jax.grad(theta_L_from_params)
+
+# Evaluate
+params = jnp.array([0.08, 0.03, jnp.arctan2(0.03, 0.08)])
+theta_L = theta_L_from_params(params)
+grad_vals = grad_theta_L(params)
+
+print(theta_L, grad_vals)
