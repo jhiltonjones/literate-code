@@ -232,7 +232,7 @@ def compute_Jp(theta_vals, x_vals, y_vals, s_vals, x_m, y_m, psi, A, E, I, mu0, 
 def m_g(psi):
     return np.array([-np.cos(psi), np.sin(psi)])
 
-magnet_3d = np.array([0.1, 0.03, 0.04])  # x, y, z
+magnet_3d = np.array([0.12, -0.05, 0.03])  # x, y, z
 catheter_base = np.array([0.05, 0.0, 0.0])
 
 phi = compute_phi_from_yz(magnet_3d[1], magnet_3d[2])
@@ -375,30 +375,34 @@ print(f"Final tip position: x = {final_position_3d[0]:.4f}, y = {final_position_
 # print(f"FD projection = {Jp_fd_proj:.6f}")
 
 # Newton-based IK solver
-def inverse_kinematics(theta_target_debug, max_iters=15, tol=np.deg2rad(3)):
-    def run_attempt(x_init, y_init, psi_init, first_time, theta_target_sol, start_time):
+def inverse_kinematics(theta_target_debug, target_tip=None, max_iters=15, tol=np.deg2rad(3), use_position=False):
+    def run_attempt(x_init, y_init, psi_init, first_time, theta_target_sol, start_time, target_tip_3d=None):
         x, y, psi = x_init, y_init, psi_init
         best_error = float("inf")
         best_solution = (x, y, psi, None)
-        no_improve_count = 0
-        max_no_improve = 2
 
         for i in range(max_iters):
-            if time.time() - start_time > 90:
-                print(f"[INFO] Timeout reached after 1 minute. Returning best solution found.")
+            if time.time() - start_time > 200:
+                print(f"[INFO] Timeout reached after 1.5 min. Returning best solution.")
                 break
+
             s_vals, theta_vals, x_vals, y_vals = solve_deflection_angle((x, y), psi)
             theta_tip = theta_vals[-1]
-            error = theta_tip - theta_target_sol
+
+            if use_position:
+                path_3d = rotate_2d_to_3d(x_vals, y_vals, phi)
+                tip = path_3d[-1]
+                error = np.linalg.norm(tip - target_tip_3d)
+            else:
+                error = theta_tip - theta_target_sol
 
             if abs(error) < abs(best_error):
                 best_error = error
                 best_solution = (x, y, psi, theta_tip)
-                no_improve_count = 0
             else:
-                no_improve_count += 1
+                pass
 
-            if abs(error) < tol:
+            if not use_position and abs(error) < tol:
                 break
 
             Jp_val, Jpsi_val = compute_Jp(theta_vals, x_vals, y_vals, s_vals, x, y, psi, A, E, I, MU0, M)
@@ -410,67 +414,177 @@ def inverse_kinematics(theta_target_debug, max_iters=15, tol=np.deg2rad(3)):
                 print(f"[WARNING] Jacobian too small at iter {i}, skipping update.")
                 break
 
-            update = -error * J_total / (denom + 1e-3)
+            if not use_position and abs(np.rad2deg(error)) > 10:
+                update = np.array([0.0, -error * J_total[1], -error * J_total[2]])
+            else:
+                update = -error * J_total / (denom + 1e-3)
+
             alpha = 1.0
             accepted = False
-            error_trial = error  # fallback default in case all trials fail
+            error_trial = error
 
             for j in range(10):
                 trial_alpha = alpha * (0.5 ** j)
-
                 x_trial = np.clip(x + trial_alpha * update[1], -0.25, 0.25)
                 y_trial = np.clip(y + trial_alpha * update[2], -0.15, 0.15)
                 psi_trial = (psi + trial_alpha * update[0] + np.pi) % (2 * np.pi) - np.pi
 
                 try:
-                    _, theta_vals_trial, _, _ = solve_deflection_angle((x_trial, y_trial), psi_trial)
-                    error_trial = theta_vals_trial[-1] - theta_target_sol
+                    _, theta_vals_trial, x_vals_trial, y_vals_trial = solve_deflection_angle((x_trial, y_trial), psi_trial)
+                    if use_position:
+                        path_3d_trial = rotate_2d_to_3d(x_vals_trial, y_vals_trial, phi)
+                        error_trial = np.linalg.norm(path_3d_trial[-1] - target_tip_3d)
+                    else:
+                        error_trial = theta_vals_trial[-1] - theta_target_sol
                 except Exception:
                     continue
 
                 if abs(error_trial) < abs(error):
                     x, y, psi = x_trial, y_trial, psi_trial
-                    print(f"[iter {i}] error = {np.rad2deg(error):.2f}° → {np.rad2deg(error_trial):.2f}°, accepted with α={trial_alpha:.4f}")
+                    print(f"[iter {i}] error = {np.rad2deg(error):.2f}° → {np.rad2deg(error_trial):.2f}°, α={trial_alpha:.4f}")
                     accepted = True
                     break
 
-            # Handle fallback mirror strategy BEFORE forcing a small step
-            if abs(np.rad2deg(error_trial)) > 40 and first_time == 0:
-                print(f"[INFO] Error {np.rad2deg(error):.2f}° too large at iter {i}. Switching initial guess...")
-                new_psi = np.arctan2(0.01, 0.12)
-                return run_attempt(0.01, 0.12, new_psi, 1, theta_target_sol, start_time)
-            if abs(np.rad2deg(error_trial)) > 40 and first_time == 1:
-                print(f"[INFO] Error {np.rad2deg(error):.2f}° too large at iter {i}. Switching initial guess again...")
-                new_psi = np.arctan2(0.06, 0.08)
-                return run_attempt(0.06, 0.08, new_psi, 2, theta_target_sol, start_time)
-
             if not accepted:
-                print(f"[iter {i}] No improvement after decay, forcing small update.")
+                print(f"[iter {i}] Forcing small fallback step.")
                 trial_alpha = 1e-2
                 x += trial_alpha * update[1]
                 y += trial_alpha * update[2]
                 psi += trial_alpha * update[0]
+                if abs(np.rad2deg(error)) > 10:
+                    psi = np.arctan2(x,y)
                 x = np.clip(x, 0.01, 0.25)
                 y = np.clip(y, 0.01, 0.15)
                 psi = psi % (2 * np.pi)
 
         return best_solution
 
-
-    # Detect if flipping strategy should be used
+    # Setup
     flip = theta_target_debug < np.deg2rad(-10)
-    first_time = 0
     theta_target_sol = abs(theta_target_debug)
+    first_time = 0
     psi_direct = np.arctan2(0.1, 0.02)
     x_init, y_init, psi_init = 0.1, 0.02, psi_direct
     start_time = time.time()
-    x_best, y_best, psi_best, theta_best = run_attempt(x_init, y_init, psi_init, first_time, theta_target_sol, start_time)
+
+    if use_position:
+        assert target_tip is not None, "Position mode requires target_tip"
+        phi = np.arctan2(target_tip[2], target_tip[1])
+        x_best, y_best, psi_best, theta_best = run_attempt(
+            x_init, y_init, psi_init, first_time, theta_target_sol, start_time, target_tip_3d=target_tip
+        )
+    else:
+        x_best, y_best, psi_best, theta_best = run_attempt(
+            x_init, y_init, psi_init, first_time, theta_target_sol, start_time
+        )
 
     if flip:
-        y_best = -1 * y_best
+        y_best = -y_best
         psi_best = (-psi_best + np.pi) % (2 * np.pi) - np.pi
 
     return x_best, y_best, psi_best, np.rad2deg(theta_best), np.rad2deg(theta_target_debug)
+
+# def inverse_kinematics(theta_target_debug, max_iters=15, tol=np.deg2rad(3)):
+#     def run_attempt(x_init, y_init, psi_init, first_time, theta_target_sol, start_time):
+#         x, y, psi = x_init, y_init, psi_init
+#         best_error = float("inf")
+#         best_solution = (x, y, psi, None)
+#         no_improve_count = 0
+#         max_no_improve = 2
+
+#         for i in range(max_iters):
+#             if time.time() - start_time > 90:
+#                 print(f"[INFO] Timeout reached after 1 minute. Returning best solution found.")
+#                 break
+#             s_vals, theta_vals, x_vals, y_vals = solve_deflection_angle((x, y), psi)
+#             theta_tip = theta_vals[-1]
+#             error = theta_tip - theta_target_sol
+
+#             if abs(error) < abs(best_error):
+#                 best_error = error
+#                 best_solution = (x, y, psi, theta_tip)
+#                 no_improve_count = 0
+#             else:
+#                 no_improve_count += 1
+
+#             if abs(error) < tol:
+#                 break
+
+#             Jp_val, Jpsi_val = compute_Jp(theta_vals, x_vals, y_vals, s_vals, x, y, psi, A, E, I, MU0, M)
+#             mg = m_g(psi)
+#             J_total = np.array([Jpsi_val, Jp_val * mg[0], Jp_val * mg[1]])
+#             denom = np.dot(J_total, J_total)
+
+#             if denom < 1e-8:
+#                 print(f"[WARNING] Jacobian too small at iter {i}, skipping update.")
+#                 break
+#             if abs(np.rad2deg(error)) > 10:
+#                 # Large error → update x and y only
+#                 update = np.array([0.0, -error * J_total[1], -error * J_total[2]])
+#             else:
+#                 update = -error * J_total / (denom + 1e-3)
+#             alpha = 1.0
+#             accepted = False
+#             error_trial = error  # fallback default in case all trials fail
+
+#             for j in range(10):
+#                 trial_alpha = alpha * (0.5 ** j)
+
+#                 x_trial = np.clip(x + trial_alpha * update[1], -0.25, 0.25)
+#                 y_trial = np.clip(y + trial_alpha * update[2], -0.15, 0.15)
+#                 psi_trial = (psi + trial_alpha * update[0] + np.pi) % (2 * np.pi) - np.pi
+
+#                 try:
+#                     _, theta_vals_trial, _, _ = solve_deflection_angle((x_trial, y_trial), psi_trial)
+#                     error_trial = theta_vals_trial[-1] - theta_target_sol
+#                 except Exception:
+#                     continue
+
+#                 if abs(error_trial) < abs(error):
+#                     x, y, psi = x_trial, y_trial, psi_trial
+#                     print(f"[iter {i}] error = {np.rad2deg(error):.2f}° → {np.rad2deg(error_trial):.2f}°, accepted with α={trial_alpha:.4f}")
+#                     accepted = True
+#                     break
+
+#             # Handle fallback mirror strategy BEFORE forcing a small step
+#             if abs(np.rad2deg(error_trial)) > 40 and first_time == 0:
+#                 print(f"[INFO] Error {np.rad2deg(error):.2f}° too large at iter {i}. Switching initial guess...")
+#                 new_psi = np.arctan2(0.01, 0.12)
+#                 return run_attempt(0.01, 0.12, new_psi, 1, theta_target_sol, start_time)
+#             if abs(np.rad2deg(error_trial)) > 40 and first_time == 1:
+#                 print(f"[INFO] Error {np.rad2deg(error):.2f}° too large at iter {i}. Switching initial guess again...")
+#                 new_psi = np.arctan2(0.06, 0.08)
+#                 return run_attempt(0.06, 0.08, new_psi, 2, theta_target_sol, start_time)
+
+#             if not accepted:
+#                 print(f"[iter {i}] No improvement after decay, forcing small update.")
+#                 trial_alpha = 1e-2
+#                 x += trial_alpha * update[1]
+#                 y += trial_alpha * update[2]
+#                 psi += trial_alpha * update[0]
+#                 if abs(np.rad2deg(error)) > 10:
+#                     psi = np.arctan2(x,y)
+#                 x = np.clip(x, 0.01, 0.25)
+#                 y = np.clip(y, 0.01, 0.15)
+#                 psi = psi % (2 * np.pi)
+
+#         return best_solution
+
+
+#     # Detect if flipping strategy should be used
+#     flip = theta_target_debug < np.deg2rad(-10)
+#     first_time = 0
+#     theta_target_sol = abs(theta_target_debug)
+#     psi_direct = np.arctan2(0.1, 0.02)
+#     x_init, y_init, psi_init = 0.1, 0.02, psi_direct
+#     start_time = time.time()
+#     x_best, y_best, psi_best, theta_best = run_attempt(x_init, y_init, psi_init, first_time, theta_target_sol, start_time)
+
+#     if flip:
+#         y_best = -1 * y_best
+#         psi_best = (-psi_best + np.pi) % (2 * np.pi) - np.pi
+
+#     return x_best, y_best, psi_best, np.rad2deg(theta_best), np.rad2deg(theta_target_debug)
 
 
 
@@ -494,19 +608,22 @@ def solve_for_target_3d(target_3d):
     phi = np.arctan2(z3, y3)
 
     print(f"[INFO] Target tip: x={x3:.3f}, y={y3:.3f}, z={z3:.3f}")
-    print(f"[INFO] Target bending angle θ = {np.rad2deg(theta_target):.2f}°, direction φ = {np.rad2deg(phi):.2f}°")
+    print(f"[INFO] Target bending angle θ = {np.rad2deg(final_bending_rad):.2f}°, direction φ = {np.rad2deg(phi):.2f}°")
 
     # Solve inverse kinematics in 2D
-    x_solved, y_solved, psi_solved, theta_sol, theta_target_used = inverse_kinematics(theta_target)
+    x_solved, y_solved, psi_solved, theta_sol, theta_target_used = inverse_kinematics(np.deg2rad(final_bending_deg))
+    # x_solved, y_solved, psi_solved, theta_sol, theta_target_used = inverse_kinematics(theta_target, target_3d, use_position=True)
 
     # Forward model in 2D
-    s_vals, theta_vals, x_vals, y_vals = solve_deflection_angle((x_solved, y_solved), psi_solved)
+    s_vals, theta_vals2, x_vals, y_vals = solve_deflection_angle((x_solved, y_solved), psi_solved)
 
     # Convert to 3D
     path_3d = rotate_2d_to_3d(x_vals, y_vals, phi)
     magnet_pos_3d = rotate_2d_to_3d(np.array([x_solved]), np.array([y_solved]), phi)[0]
     actual_tip = path_3d[-1]
-
+    final_bending_rad2 = theta_vals2[-1]
+    final_bending_deg2 = np.rad2deg(final_bending_rad2)
+    print(f"Final bending angle θ(L): {final_bending_deg2:.3f} degrees")
     return {
         "path_3d": path_3d,
         "magnet_pos_3d": magnet_pos_3d,
@@ -526,7 +643,16 @@ def solve_for_target_3d(target_3d):
 
 target = np.array([final_position_3d[0], final_position_3d[1], final_position_3d[2]])  
 res = solve_for_target_3d(target)
+# Print results
+magnet_pos = res["magnet_pos_3d"]
+tip_pos = res["actual_tip"]
+psi_pos = res["psi_solved"]  # ✅ Correct key
+magnet_pos_tar = res["target_3d"]
 
+print(f"[RESULT] Psi is {psi_pos:.4f} rad = {np.rad2deg(psi_pos):.2f}°")
+print(f"[RESULT] Magnet position: x = {magnet_pos[0]:.4f}, y = {magnet_pos[1]:.4f}, z = {magnet_pos[2]:.4f}")
+print(f"[RESULT] Final tip position: x = {tip_pos[0]:.4f}, y = {tip_pos[1]:.4f}, z = {tip_pos[2]:.4f}")
+print(f"[RESULT] Target position: x = {magnet_pos_tar[0]:.4f}, y = {magnet_pos_tar[1]:.4f}, z = {magnet_pos_tar[2]:.4f}")
 
 # psi_vals = np.linspace(-np.pi, np.pi, 10)
 # J_psi_vals = []
