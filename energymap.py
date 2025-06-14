@@ -5,9 +5,8 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import os
 
-output_folder = "figures_output60.2_deflect"
+output_folder = "figures_output60.2_attract18"
 os.makedirs(output_folder, exist_ok=True)
-
 
 # Parameters for MSCR #1 (length, radius, modulus, magnetization)
 L = 0.08  # rod length in meters (24 mm)
@@ -24,9 +23,9 @@ I = math.pi * r**4 / 4.0
 MU0 = 4 * math.pi * 1e-7      # vacuum permeability (μ0)
 M = 8000
 
-MAGNET_M = 318           # magnet's dipole moment magnitude (A·m^2), calibrated for the N52 magnet
+MAGNET_M = 346           # magnet's dipole moment magnitude (A·m^2), calibrated for the N52 magnet
 
-magnet_position = np.array([0.02, 0.2])
+magnet_position = np.array([0.02, 0.16])
 theta_range_small = np.linspace(-180, 180, 50)
 theta1_grid_small, theta2_grid_small = np.meshgrid(theta_range_small, theta_range_small)
 
@@ -103,9 +102,9 @@ def solve_deflection_angle_energy(magnet_pos, magnet_dipole_angle, n_steps = 100
             elif _ < 2 * n_steps // 4:
                 local_dipole_angle = magnet_dipole_angle  # +x direction
             elif _ < 3 * n_steps // 4:
-                local_dipole_angle = magnet_dipole_angle   # +x direction
+                local_dipole_angle = magnet_dipole_angle  # +x direction
             else:
-                local_dipole_angle = magnet_dipole_angle   # -x direction
+                local_dipole_angle = magnet_dipole_angle # -x direction
             
             if local_dipole_angle is None:
                 ddtheta = 0.0  # No torque applied
@@ -186,9 +185,9 @@ def solve_deflection_angle_energy(magnet_pos, magnet_dipole_angle, n_steps = 100
         elif i < 2 * n_steps // 4:
             local_dipole_angle = magnet_dipole_angle   # +x direction
         elif i < 3 * n_steps // 4:
-            local_dipole_angle = magnet_dipole_angle  # +x direction
+            local_dipole_angle = magnet_dipole_angle # +x direction
         else:
-            local_dipole_angle = magnet_dipole_angle  # -x direction
+            local_dipole_angle = magnet_dipole_angle # -x direction
         
         if local_dipole_angle is None:
             ddtheta = 0.0  # No torque applied

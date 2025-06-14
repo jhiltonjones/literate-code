@@ -227,7 +227,7 @@ def solve_deflection_angle(magnet_pos, magnet_dipole_angle, n_steps = 1000):
             elif _ < 3 * n_steps // 6:
                 local_dipole_angle = magnet_dipole_angle  # +x direction
             elif _ < 4 * n_steps // 6:
-                local_dipole_angle = magnet_dipole_angle  # +x direction
+                local_dipole_angle = magnet_dipole_angle +np.pi# +x direction
             elif _ < 5 * n_steps // 6:
                 local_dipole_angle = magnet_dipole_angle +np.pi # +x direction
             else:
@@ -321,7 +321,7 @@ def solve_deflection_angle(magnet_pos, magnet_dipole_angle, n_steps = 1000):
         elif i < 3 * n_steps // 6:
             local_dipole_angle = magnet_dipole_angle  # +x direction
         elif i < 4 * n_steps // 6:
-            local_dipole_angle = magnet_dipole_angle  # +x direction
+            local_dipole_angle = magnet_dipole_angle +np.pi  # +x direction
         elif i < 5 * n_steps // 6:
             local_dipole_angle = magnet_dipole_angle +np.pi # +x direction
         else:
@@ -454,11 +454,11 @@ angle_rad = np.arctan2(direction[1], direction[0])
 angle_deg = np.rad2deg(angle_rad)
 
 # psi = angle_rad   # Align magnetic dipole toward catheter
-psi = np.deg2rad(45)
+psi2 = np.deg2rad(-90)
 print(f"Angle of external magnet ψ: {angle_deg:.2f} degrees")
 
 # Solve deflection
-s_vals, theta_vals, x_vals, y_vals = solve_deflection_angle(magnet_position, psi)
+s_vals, theta_vals, x_vals, y_vals = solve_deflection_angle(magnet_position, psi2)
 
 # Final bending angle
 final_bending_rad = theta_vals[-1]
@@ -470,7 +470,7 @@ print(f"Final tip position: x = {x_vals[-1]:.4f}, y = {y_vals[-1]:.4f}")
 
 # print("phi (rotation back angle):", phi)
 # print("magnet_2d:", magnet_2d)
-print("psi from 3D projection:", psi)
+print("psi from 3D projection:", psi2)
 # print("psi from 2D direction:", angle_rad)
 
 import matplotlib.pyplot as plt
@@ -478,7 +478,7 @@ import matplotlib.pyplot as plt
 plt.figure(figsize=(6, 6))
 
 # Plot catheter deformation
-plt.plot(x_vals, y_vals, linewidth=2, label=f'ψ = {math.degrees(psi):.1f}°')
+plt.plot(x_vals, y_vals, linewidth=2, label=f'ψ = {math.degrees(psi2):.1f}°')
 
 # Plot magnet position
 plt.scatter(magnet_position[0], magnet_position[1], color='red', s=80, label='Magnet')
