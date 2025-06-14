@@ -57,62 +57,101 @@ def estimate_catheter_direction(gray_enhanced, rod_tip_x, rod_tip_y, dark_thresh
 
 
 
-def detect_rod_tip_darkest_right(image_path, graph=True):
+def detect_rod_tip_yellow_right(image_path, graph=False):
     image = cv2.imread(image_path)
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    gray_enhanced = cv2.equalizeHist(gray)
-
-    dark_threshold = np.min(gray_enhanced) + 15
-    mask_x = (np.arange(gray_enhanced.shape[1]) >= 147) & (np.arange(gray_enhanced.shape[1]) <= 590)
+    image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    mask_x = (np.arange(image.shape[1]) >= 60) & (np.arange(image.shape[1]) <= 415)
     x_indices = np.where(mask_x)[0]
-    # exclude_x_min, exclude_x_max = 250, 383
-    # exclude_y_min, exclude_y_max = 185, 218
- 
-    mask_y = (np.arange(gray_enhanced.shape[0]) > 126) & (np.arange(gray_enhanced.shape[0]) <= 280)
-    y_range_indices = np.where(mask_y)[0]
+    mask_y = (np.arange(image.shape[0]) > 130) & (np.arange(image.shape[0]) <= 280)
+    y_indices = np.where(mask_y)[0]
 
-    y_all, x_all = np.where(gray_enhanced <= dark_threshold)
-
-    exclude_x_min, exclude_x_max = 0,0
-    exclude_y_min, exclude_y_max = 0,0
-
-    valid_idx = [
-        i for i, (x, y) in enumerate(zip(x_all, y_all))
-        if (x in x_indices and y in y_range_indices) and not (
-            exclude_x_min <= x <= exclude_x_max and exclude_y_min <= y <= exclude_y_max
-        )
+    yellow_ranges = [
+        (np.array([20, 150, 200]), np.array([40, 255, 255])),
+        (np.array([18, 120, 180]), np.array([42, 255, 255])),
+        (np.array([16, 100, 150]), np.array([44, 255, 255])),
+        (np.array([15, 80, 120]),  np.array([45, 255, 255]))
     ]
 
+    yellow_mask = None
+    largest_contour = None
 
-    if not valid_idx:
-        raise ValueError("No dark pixels found within specified x and y ranges")
+    for i, (lower_yellow, upper_yellow) in enumerate(yellow_ranges):
+        temp_mask = cv2.inRange(image_hsv, lower_yellow, upper_yellow)
+        region_mask = np.zeros_like(temp_mask)
+        region_mask[np.ix_(y_indices, x_indices)] = 1
+        masked_yellow = cv2.bitwise_and(temp_mask, temp_mask, mask=region_mask.astype(np.uint8))
+        contours, _ = cv2.findContours(masked_yellow, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if contours:
+            largest_contour = max(contours, key=cv2.contourArea)
+            yellow_mask = masked_yellow
+            break
 
-    x_filtered = x_all[valid_idx]
-    y_filtered = y_all[valid_idx]
-    leftmost_idx = np.argmin(x_filtered)
+    if largest_contour is None:
+        raise ValueError("No yellow tip found in any HSV range.")
 
-    rod_tip = (x_filtered[leftmost_idx], y_filtered[leftmost_idx])
-    rod_tip_x, rod_tip_y = rod_tip
+    rod_tip_point = min(largest_contour[:, 0, :], key=lambda p: p[0])
 
-    catheter_dir, mean = estimate_catheter_direction(gray_enhanced, rod_tip_x, rod_tip_y, dark_threshold, debug_image=image_rgb)
+    rod_tip_x, rod_tip_y = int(rod_tip_point[0]), int(rod_tip_point[1])
+    rod_tip = (rod_tip_x, rod_tip_y)
+
+    contour_points = largest_contour[:, 0, :]
+    sorted_points = contour_points[np.argsort(-contour_points[:, 0])]
+    N = max(10, len(sorted_points) // 3)
+    base_points = sorted_points[:N]
+
+# Use all contour points to estimate the shaft direction
+    mean = np.mean(contour_points, axis=0)
+    centered = contour_points - mean
+    _, _, vh = np.linalg.svd(centered, full_matrices=False)
+    principal_direction = vh[0]
+
+    # Flip direction if it's pointing away from the tip
+    tip_vector = np.array([rod_tip_x, rod_tip_y]) - mean
+    if np.dot(principal_direction, tip_vector) > 0:
+        principal_direction *= -1
+
+    catheter_dir = principal_direction / np.linalg.norm(principal_direction)
+
+
+    if graph:
+        pt1 = tuple(np.round(mean).astype(int))
+        pt2 = tuple(np.round(mean + 40 * catheter_dir).astype(int))
+        cv2.arrowedLine(image_rgb, pt1, pt2, (255, 0, 255), 2, tipLength=0.1)
+
+        cv2.circle(image_rgb, (rod_tip_x, rod_tip_y), 5, (0, 255, 0), -1)
+        cv2.imshow("Detected Rod Tip and Direction", cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR))
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+
+
+
+    # # --- Estimate direction using grayscale ---
+    # gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # gray_enhanced = cv2.equalizeHist(gray)
+    # dark_threshold = np.min(gray_enhanced) + 15
+
+    # catheter_dir, mean = estimate_catheter_direction(
+    #     gray_enhanced, rod_tip_x, rod_tip_y, dark_threshold, debug_image=image_rgb
+    # )
 
     ring_coords = np.array([
-    (566.5, 188.9),
-    (535.8, 183.2),
-    (502.9, 173.2),
-    (475.8, 161.8),
-    (449.4, 151.8),
-    (430.8, 153.2),
-    (409.4, 163.2),
-    (389.4, 183.2),
-    (363.0, 200.3),
-    (318.0, 217.5),
-    (272.3, 221.0),
-    (217.3, 223.2),
-    (164.5, 208.9),
-    (156.6, 161.8),
-    (150.9, 136.8)
+    (379.3, 225.1),
+    (347.4, 223.7),
+    (319.4, 220.4),
+    (294.1, 213.7),
+    (280.1, 205.1),
+    (267.4, 194.4),
+    (254.1, 190.4),
+    (232.1, 201.1),
+    (218.8, 205.1),
+    (200.2, 213.1),
+    (170.2, 225.7),
+    (146.9, 233.1),
+    (116.9, 237.7),
+    (76.3, 247.7),
+    (38.3, 249.0)
     ])
     tck, _ = splprep(ring_coords.T, s=0)
     u_fine = np.linspace(0, 1, 400)
@@ -123,7 +162,7 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
     distances = np.linalg.norm(spline_points - tip_point, axis=1)
     closest_index = np.argmin(distances)
     closest_spline_x, closest_spline_y = spline_points[closest_index]
-    scale_pixels_per_mm = 2.66
+    scale_pixels_per_mm = 2.35
 
     spline_coords = np.array([x_spline, y_spline]).T
     deltas = np.diff(spline_coords, axis=0)
@@ -139,17 +178,31 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
 
     target_point = spline_coords[new_index]
 
-    if 0 < new_index < len(spline_coords) - 1:
-        prev = spline_coords[new_index - 1]
-        nxt = spline_coords[new_index + 1]
-        tangent_new = nxt - prev
+    window_size = 5  # Should be odd
+    half_window = window_size // 2
+    start = max(0, new_index - half_window)
+    end = min(len(spline_coords), new_index + half_window + 1)
+
+    window_points = spline_coords[start:end]
+    if len(window_points) < 2:
+        tangent_new = np.array([1.0, 0.0])  # Fallback
     else:
-        tangent_new = np.array([1, 0])
+        # Fit line to local spline segment using SVD
+        mean_local = np.mean(window_points, axis=0)
+        centered_local = window_points - mean_local
+        _, _, vh_local = np.linalg.svd(centered_local, full_matrices=False)
+        tangent_new = vh_local[0]
+
+        # Optional: ensure it points forward (same x-direction as catheter_dir)
+        if np.dot(tangent_new, catheter_dir) < 0:
+            tangent_new *= -1
+
 
     unit_tangent_new = tangent_new / np.linalg.norm(tangent_new)
     alignment_angle = compute_angle(catheter_dir, unit_tangent_new)
     alignment_angle = min(alignment_angle, 180 - alignment_angle)
-
+    catheter_to_x_angle = compute_angle(catheter_dir, np.array([1.0, 0.0]))
+    print(f"alignment to the x-axis {catheter_to_x_angle}")
     rod_tip_filtered = rod_tip
     pixel_distance = np.linalg.norm(np.array(rod_tip_filtered) - np.array([closest_spline_x, closest_spline_y]))
     desired_point = np.array([closest_spline_x, closest_spline_y])
@@ -167,19 +220,19 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
     if abs(rod_tip_y - closest_spline_y) > 2:
         relation_text = "Rod tip ABOVE spline" if rod_tip_y < closest_spline_y else "Rod tip BELOW spline"
         tip = "Above" if rod_tip_y < closest_spline_y else "Below"
-        if tip == "Above":
+        if tip == "Below":
             alignment_angle *= -1
 
     if graph:
         cv2.circle(image_rgb, (int(target_point[0]), int(target_point[1])), 6, (0, 0, 255), -1)
-        cv2.putText(image_rgb, "20mm along spline", (int(target_point[0]) + 10, int(target_point[1])),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        # cv2.putText(image_rgb, "20mm along spline", (int(target_point[0]) + 10, int(target_point[1])),
+        #             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
         spline_poly = np.array(list(zip(x_spline, y_spline)), dtype=np.int32).reshape((-1, 1, 2))
-        cv2.polylines(image_rgb, [spline_poly], isClosed=False, color=(0, 255, 0), thickness=2)
+        cv2.polylines(image_rgb, [spline_poly], isClosed=False, color=(0, 255, 0), thickness=1)
         # cv2.circle(image_rgb, rod_tip, 10, (255, 0, 0), -1)
-        cv2.putText(image_rgb, "Rod Tip (darkest)", (rod_tip_x + 10, rod_tip_y),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+        # cv2.putText(image_rgb, "Rod Tip (darkest)", (rod_tip_x + 10, rod_tip_y),
+        #             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
         # cv2.circle(image_rgb, (int(closest_spline_x), int(closest_spline_y)), 8, (0, 255, 255), -1)
         cv2.putText(image_rgb, "Closest Spline Pt", (int(closest_spline_x) + 10, int(closest_spline_y)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
@@ -202,12 +255,13 @@ def detect_rod_tip_darkest_right(image_path, graph=True):
     print(f"Alignment angle between catheter and spline direction: {alignment_angle:.2f} degrees")
     print(relation_text)
 
-    return tip, rod_tip, signed_distance_mm, desired_point, alignment_angle
+
+    return tip, rod_tip, signed_distance_mm, desired_point, alignment_angle, catheter_to_x_angle
 
 
 if __name__ == "__main__":
     image_path = new_capture()
-    relation, tip_pos, dist_mm, spline_pt, angle = detect_rod_tip_darkest_right(image_path, graph=True)
+    relation, tip_pos, dist_mm, spline_pt, angle, x_alignment = detect_rod_tip_yellow_right(image_path, graph=True)
     print("Tip position:", tip_pos)
     print("Distance (mm):", dist_mm)
     print("Angle (deg):", angle)

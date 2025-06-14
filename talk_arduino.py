@@ -40,7 +40,7 @@ def distance_to_steps(distance_mm):
     return int(distance_mm / mm_per_step)
 
 if __name__ == '__main__':
-    distance = 10  # mm
+    distance = 20  # mm
     steps = distance_to_steps(distance)
     delay_ms = 5  # 20 ms per half-step = 25 steps/sec
-    arduino_control(f'REV {steps}', delay_us=delay_ms)
+    arduino_control(f'ON {steps}', delay_us=delay_ms)

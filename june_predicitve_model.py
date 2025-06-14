@@ -24,7 +24,7 @@ from PID_control import PIDController
 from inverse_pos_to_robot import position_mapping
 from tip_angle_predictive import below_or_above2
 from new_cam import new_capture
-from new_finder2 import detect_rod_tip_darkest_right
+from june_tip_finder import detect_rod_tip_yellow_right
 from talk_arduino2 import arduino_queue, distance_to_steps, shutdown_arduino
 finished = False
 plot = False
@@ -41,8 +41,8 @@ plot = False
 #         file.write(log_entry)
 
 #     print(f"Logged: {log_entry.strip()}")
-translate =False
-max_attempts = 0
+translate = True
+max_attempts = 50
 
 distance = 160
 steps = distance_to_steps(distance)
@@ -139,8 +139,8 @@ transformed_points = transform_point(T, d, h)
 x_robotic_arm = transformed_points[0]
 y_robotic_arm = transformed_points[1]
 
-start_point = [0.6418141771310159, -0.28625219138796465, 0.2754611286160007, 1.7430499231868146, -2.098658516733236, -0.5653719066619708]
-start_point2 = [-0.16841346422304326, -1.854746480981344, -1.9078047275543213, -1.489295558338501, 1.5657005310058594, 0.018113115802407265]
+start_point = [0.9147010540826014, -0.46869447847725715, 0.27608444448231034, -3.107199363893186, -0.3989044391666398, 0.009094121436657948]
+start_point2 = [-0.30395204225649053, -2.2527348003783167, -1.3683218955993652, -1.0997814399055024, 1.5787557363510132, 4.153120040893555]
 
 waypoints = [
     [-2.2383063475238245, -1.846382280389303, 2.72556716600527, 3.8191911417194824, -1.6096790472613733, 0.7579470872879028],
@@ -220,7 +220,7 @@ while attempts < max_attempts:
         # image_path = capture_imFalseage()
         image_path = new_capture()
         # tip, rod_pos, error, desired_point, alignment_angle = below_or_above2(image_path, False)
-        tip, rod_pos, error, desired_point, alignment_angle = detect_rod_tip_darkest_right(image_path, False)
+        tip, rod_pos, error, desired_point, alignment_angle, x_alignment = detect_rod_tip_yellow_right(image_path, False)
         print(f"Rod Postion: {rod_pos[0]}")
         if translate:
             if attempts % 2 == 0:
@@ -239,7 +239,7 @@ while attempts < max_attempts:
                 else:
                     print("SPEED Fast")
                     arduino_queue.put((f'ON {steps}', 20))  # fastest
-        if rod_pos[0] < 245:
+        if rod_pos[0] < 80:
             print("STOP")
             final = 0
             arduino_queue.put((f'ON {final}', 10))
@@ -252,13 +252,13 @@ while attempts < max_attempts:
         print(f'Position of x is {using_tcp_pose[0]}')
         print(f'Position of y is {using_tcp_pose[1]}')
         print(f'Alignment angle is {alignment_angle}')
-        calc_newx, calc_newy, deg_out = position_mapping(rod_pos, using_tcp_pose[0], using_tcp_pose[1], using_pos[5], np.deg2rad(alignment_angle))
+        calc_newx, calc_newy, deg_out = position_mapping(rod_pos, using_tcp_pose[0], using_tcp_pose[1], using_pos[5], np.deg2rad(alignment_angle), x_alignment)
         print(f"Robot Frame Reconstructed: x = {calc_newx:.3f}, y = {calc_newy:.3f}, Rotation = {deg_out}")
 
         # Keep a fixed pose orientation
-        position = [calc_newx, calc_newy, 0.2754611286160007, 1.7430499231868146, -2.098658516733236, -0.5653719066619708]
-        calc_newy = np.clip(calc_newy, -0.4665337195986764, -0.261997527714459)
-        calc_newx = np.clip(calc_newx, 0.5473123993450011, 0.7512652347629138)
+        position = [calc_newx, calc_newy, 0.27608444448231034, -3.107199363893186, -0.3989044391666398, 0.009094121436657948]
+        calc_newy = np.clip(calc_newy, -0.6239054718941721, -0.2939327215024257)
+        calc_newx = np.clip(calc_newx, 0.5738125225986604, 1.0368513948595706)
         list_to_setp(setp, position, offset=12)
         joints_off = get_inverse(con, setp, position)
 
@@ -266,7 +266,7 @@ while attempts < max_attempts:
             joint6_angle = joints_off[5]
 
         joint6_angle = (deg_out)
-        joint6_angle = np.clip(joint6_angle, -2.5008721987353724, 1.7555055618286133)
+        joint6_angle = np.clip(joint6_angle, 1.0867736339569092, 5.501124382019043)
 
         # if tip == "Below":
         #     joint6_angle -= rotation_step

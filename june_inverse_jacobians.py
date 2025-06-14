@@ -81,7 +81,7 @@ def bend_test(vec, rot):
 
 def sympy_solver(angle, x_var, angle2):
     "This is the beam theory that solves the deflection"
-    Ev = 3e6
+    Ev = 4e6
     Iv = 4.1e-13
     L_total = 0.03
     dtheta_dF = (L_total**2) / (2 * Ev * Iv)
@@ -184,9 +184,9 @@ def sympy_solver(angle, x_var, angle2):
             x_var += alpha * delta_x
 
             # Clamp
-            x_var[0] = np.clip(x_var[0], 0.15, 0.25)
-            x_var[1] = np.clip(x_var[1], 0, 0.04)
-            x_var[2] = np.clip(x_var[2], 0, 180)
+            x_var[0] = np.clip(x_var[0], 0.14, 0.25)
+            x_var[1] = np.clip(x_var[1], -0.60, 0.04)
+            x_var[2] = np.clip(x_var[2], 0, 4)
 
             # Best solution tracker
             if abs(e) < best_error:
@@ -201,6 +201,7 @@ def sympy_solver(angle, x_var, angle2):
             if iter % 1000 == 0:
                 print("Jacobian:", J_theta)
     print(f"\nBest solution found for {np.rad2deg(angle2)}:")
+    best_x[0] -= 0.025
     print(f"x = {best_x[0]:.4f} m\ny = {best_x[1]:.4f} m\nangle = {best_x[2]:.2f} deg")
     print(f"Final error = {rad2deg(best_error):.4f} deg")
     return best_x[0], best_x[1], best_x[2] 
@@ -258,7 +259,7 @@ if __name__ == "__main__":
     # theta_c_desired = np.deg2rad(20)
 
     x_var = np.array([0.2, 0.02, 0.0])
-    angle = np.deg2rad(44)
+    angle = np.deg2rad(45)
     angle2 = angle
     initial_guesses = [45, 0, 180]
     y_calc_pos, x_calc_pos, rotation_calc2 = sympy_solver(angle, x_var, angle2)
@@ -275,5 +276,5 @@ if __name__ == "__main__":
     # print(f'Degrees: {x_var[2]} Radians: {np.deg2rad(x_var[2])}')
     # print(f'x = {x_var[0]:.4f} m\ny = {x_var[1]:.4f}')
 
-    bending = bend_test(r_vec, rotation_calc2)
+    bending = bend_test(r_vec, 5)
     print(f'Bending is {np.rad2deg(bending)}')
