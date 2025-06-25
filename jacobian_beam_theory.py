@@ -352,6 +352,74 @@ def set_axes_equal(ax):
     ax.set_ylim3d(new_limits[0][1], new_limits[1][1])
     ax.set_zlim3d(new_limits[0][2], new_limits[1][2])
 
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Your helper functions must be defined:
+# compute_phi_from_yz, project_magnet_to_2d, solve_deflection_angle, rotate_2d_to_3d
+
+# List of 3D magnet positions
+magnet_list = [
+    np.array([0.05, -0.08, 0.07]),
+    np.array([-0.03, 0.03, 0.1]),
+    np.array([0.1, 0.03, 0.04])
+]
+
+catheter_base = np.array([0.05, 0.0, 0.0])
+delta = np.deg2rad(0)
+
+# Prepare plot
+fig = plt.figure()
+ax = fig.add_subplot(projection='3d')
+
+# Use Matplotlib default color cycle
+colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+
+for i, magnet_3d in enumerate(magnet_list):
+    color = colors[i % len(colors)]
+
+    phi = compute_phi_from_yz(magnet_3d[1], magnet_3d[2])
+    magnet_2d = project_magnet_to_2d(magnet_3d[0], magnet_3d[1], magnet_3d[2])
+    psi = np.arctan2(magnet_2d[1], magnet_2d[0]) + delta
+
+    s_vals, theta_vals, x_vals, y_vals = solve_deflection_angle(magnet_2d, psi)
+    path_3d = rotate_2d_to_3d(x_vals, y_vals, phi)
+
+    # Plot deflected path in unique color
+    ax.plot(path_3d[:, 0], path_3d[:, 1], path_3d[:, 2],
+            label=f"Deflected Shape {i+1}", color=color, lw=2)
+
+    # Magnet in matching color
+    ax.scatter(*magnet_3d, color=color, s=50, marker='X', label=f"Magnet {i+1}")
+
+    # Base and tip (optional: use same color but smaller markers)
+    ax.scatter(*path_3d[0], color=color, s=40, marker='o')  # base
+    ax.scatter(*path_3d[-1], color=color, s=40, marker='^')  # tip
+
+ax.set_xlabel("X")
+ax.set_ylabel("Y")
+ax.set_zlabel("Z")
+ax.legend()
+
+def set_axes_equal(ax):
+    limits = np.array([ax.get_xlim3d(), ax.get_ylim3d(), ax.get_zlim3d()])
+    spans = limits[:, 1] - limits[:, 0]
+    centers = np.mean(limits, axis=1)
+    max_span = max(spans)
+    ax.set_xlim3d(centers[0] - max_span / 2, centers[0] + max_span / 2)
+    ax.set_ylim3d(centers[1] - max_span / 2, centers[1] + max_span / 2)
+    ax.set_zlim3d(centers[2] - max_span / 2, centers[2] + max_span / 2)
+
+set_axes_equal(ax)
+plt.tight_layout()
+plt.show()
+
+
+
+
+
+
 # set_axes_equal(ax)
 # plt.tight_layout()
 # plt.show()
@@ -523,7 +591,126 @@ def inverse_kinematics(theta_target_debug, target_tip=None, max_iters=15, tol=np
         psi_best = (-psi_best + np.pi) % (2 * np.pi) - np.pi
 
     return x_best, y_best, psi_best, np.rad2deg(theta_best), np.rad2deg(theta_target_debug)
+def inverse_kinematics3(theta_target_debug, target_tip=None, max_iters=15, tol=np.deg2rad(3), use_position=False):
+    def run_attempt(x_init, y_init, psi_init, first_time, theta_target_sol, start_time, target_tip_3d=None):
+        x, y, psi = x_init, y_init, psi_init
+        best_error = float("inf")
+        best_solution = (x, y, psi, None)
 
+        for i in range(max_iters):
+            if time.time() - start_time > 200:
+                print(f"[INFO] Timeout reached after 1.5 min. Returning best solution.")
+                break
+
+            s_vals, theta_vals, x_vals, y_vals = solve_deflection_angle((x, y), psi)
+            theta_tip = theta_vals[-1]
+
+            if use_position:
+                path_3d = rotate_2d_to_3d(x_vals, y_vals, phi)
+                tip = path_3d[-1]
+                error = np.linalg.norm(tip - target_tip_3d)
+                print(f"Error is : {error}")
+            else:
+                error = theta_tip - theta_target_sol
+
+            if abs(error) < abs(best_error):
+                best_error = error
+                best_solution = (x, y, psi, theta_tip)
+            else:
+                pass
+            if not use_position and abs(error) > 40:
+                print(f"Switching intial position")
+                psi_direct2 = np.arctan2(0.05, 0.1)
+                run_attempt(
+                            0.05, 0.1, psi_direct2, first_time, theta_target_sol, start_time
+                        )
+            if not use_position and abs(error) < tol:
+                break
+            if use_position and abs(error) < 0.005:
+                break
+            grad_vector, Jpsi_val = compute_full_gradient(theta_vals, x_vals, y_vals, s_vals, x, y, psi, A, E, I, MU0, M)
+            mg = m_g(psi)
+            J_total = np.array([Jpsi_val, grad_vector[0], grad_vector[1]])  # shape (3,)
+            denom = np.dot(J_total, J_total)
+
+            if denom < 1e-8:
+                print(f"[WARNING] Jacobian too small at iter {i}, skipping update.")
+                break
+
+            if not use_position and abs(np.rad2deg(error)) > 10:
+                update = np.array([0.0, -error * J_total[1], -error * J_total[2]])
+            else:
+                update = -error * J_total / (denom + 1e-3)
+
+            if use_position and abs(np.rad2deg(error)) <0.0001 :
+                update = np.array([0.0, -error * J_total[1], -error * J_total[2]])
+            else:
+                update = -error * J_total / (denom + 1e-3)
+            alpha = 1.0
+            accepted = False
+            error_trial = error
+
+            for j in range(5):
+                trial_alpha = alpha * (0.5 ** j)
+                x_trial = np.clip(x + trial_alpha * update[1], -0.25, 0.25)
+                y_trial = np.clip(y + trial_alpha * update[2], -0.15, 0.15)
+                psi_trial = (psi + trial_alpha * update[0] + np.pi) % (2 * np.pi) - np.pi
+
+                try:
+                    _, theta_vals_trial, x_vals_trial, y_vals_trial = solve_deflection_angle((x_trial, y_trial), psi_trial)
+                    if use_position:
+                        path_3d_trial = rotate_2d_to_3d(x_vals_trial, y_vals_trial, phi)
+                        error_trial = np.linalg.norm(path_3d_trial[-1] - target_tip_3d)
+                    else:
+                        error_trial = theta_vals_trial[-1] - theta_target_sol
+                except Exception:
+                    continue
+
+                if abs(error_trial) < abs(error):
+                    x, y, psi = x_trial, y_trial, psi_trial
+                    print(f"[iter {i}] error = {np.rad2deg(error):.2f}° → {np.rad2deg(error_trial):.2f}°, α={trial_alpha:.4f}")
+                    accepted = True
+                    break
+
+            if not accepted:
+                print(f"[iter {i}] Forcing small fallback step.")
+                trial_alpha = 1e-2
+                # trial_alpha = 10
+
+                x += trial_alpha * update[1]
+                y += trial_alpha * update[2]
+                psi += trial_alpha * update[0]
+                if not use_position and abs(np.rad2deg(error)) > 10:
+                    psi = np.arctan2(x,y)
+
+                x = np.clip(x, 0.01, 0.25)
+                y = np.clip(y, 0.01, 0.15)
+                psi = psi % (2 * np.pi)
+
+        return best_solution
+    flip = theta_target_debug < np.deg2rad(-10)
+    theta_target_sol = abs(theta_target_debug)
+    first_time = 0
+    psi_direct = np.arctan2(0.1, 0.02)
+    x_init, y_init, psi_init = 0.1, 0.02, psi_direct
+    start_time = time.time()
+
+    if use_position:
+        assert target_tip is not None, "Position mode requires target_tip"
+        phi = np.arctan2(target_tip[2], target_tip[1])
+        x_best, y_best, psi_best, theta_best = run_attempt(
+            x_init, y_init, psi_init, first_time, theta_target_sol, start_time, target_tip_3d=target_tip
+        )
+    else:
+        x_best, y_best, psi_best, theta_best = run_attempt(
+            x_init, y_init, psi_init, first_time, theta_target_sol, start_time
+        )
+
+    if flip:
+        y_best = -y_best
+        psi_best = (-psi_best + np.pi) % (2 * np.pi) - np.pi
+
+    return x_best, y_best, psi_best, np.rad2deg(theta_best), np.rad2deg(theta_target_debug)
 def inverse_kinematics2(theta_target_debug, target_tip=None, max_iters=15, tol=np.deg2rad(3), use_position=False):
     def run_attempt(x_init, y_init, psi_init, first_time, theta_target_sol, start_time, target_tip_3d=None):
         x, y, psi = x_init, y_init, psi_init
@@ -662,7 +849,7 @@ def solve_for_target_3d(target_3d):
     print(f"[INFO] Target tip: x={x3:.3f}, y={y3:.3f}, z={z3:.3f}")
     print(f"[INFO] Target bending angle θ = {np.rad2deg(final_bending_rad):.2f}°, direction φ = {np.rad2deg(phi):.2f}°")
 
-    x_solved, y_solved, psi_solved, theta_sol, theta_target_used = inverse_kinematics(np.deg2rad(final_bending_deg))
+    x_solved, y_solved, psi_solved, theta_sol, theta_target_used = inverse_kinematics3(np.deg2rad(final_bending_deg))
     # x_solved, y_solved, psi_solved, theta_sol, theta_target_used = inverse_kinematics(theta_target, target_3d, use_position=True)
 
     s_vals, theta_vals2, x_vals, y_vals = solve_deflection_angle((x_solved, y_solved), psi_solved)

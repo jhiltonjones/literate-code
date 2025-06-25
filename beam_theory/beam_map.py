@@ -85,14 +85,28 @@ for i, y in enumerate(y_vals):
 
 X, Y = np.meshgrid(x_vals, y_vals)
 theta_c_hat_grid_capped = np.clip(theta_c_hat_grid, None, 140)
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+# Use MathText (default)
+plt.rcParams['font.family'] = 'DejaVu Sans'
 
 fig = plt.figure(figsize=(10, 6))
 ax = fig.add_subplot(111, projection='3d')
+
 surf = ax.plot_surface(X, Y, theta_c_hat_grid_capped, cmap='viridis')
-ax.set_xlabel('EPM X Position (m)')
-ax.set_ylabel('EPM Y Position (m)')
-ax.set_zlabel('Estimated Bending Angle θ̂_c (deg)')
-ax.set_title('Bending Angle vs. EPM X and Y Position')
+
+# Use math-style strings (no \textbf, just plain math expressions)
+ax.set_xlabel(r'EPM X Position (m)', fontsize=13, labelpad=10)
+ax.set_ylabel(r'EPM Y Position (m)', fontsize=13, labelpad=10)
+ax.set_zlabel(r'Estimated Bending Angle $\hat{\theta}_c$ (degrees)', fontsize=13, labelpad=10)
+ax.set_title(r'Bending Angle vs. EPM X-Y Position', fontsize=14, pad=15)
+
+ax.tick_params(labelsize=11)
+
+# Optional colorbar with MathText
+fig.colorbar(surf, ax=ax, shrink=0.7, aspect=12, pad=0.1,
+             label=r'$\hat{\theta}_c$ (degrees)')
+
 plt.tight_layout()
 plt.show()
-

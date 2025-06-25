@@ -378,7 +378,7 @@ def solve_deflection_angle_energy(magnet_pos, magnet_dipole_angle, n_steps = 100
 # plt.tight_layout()
 # plt.show()
 
-psi_range = np.arange(0, 361, 30)
+psi_range = np.arange(0, 361, 60)
 energy_differences = []
 
 fig_energy, ax_energy = plt.subplots(figsize=(10, 4))
@@ -398,7 +398,9 @@ for psi_deg_single in psi_range:
     curvature_vals = np.gradient(theta_vals, s_vals)
     dF_dtheta_vals = np.array(dF_dtheta_vals)
     torque_density = M * dF_dtheta_vals
-    total_energy_along_beam = np.array(mag_energy_along_beam) + np.array(elas_energy_along_beam)
+    # total_energy_along_beam = np.array(mag_energy_along_beam) + np.array(elas_energy_along_beam)
+    total_energy_along_beam = np.array(elas_energy_along_beam)
+
     half = len(total_energy_along_beam) // 2
     first_half_energy = np.sum(total_energy_along_beam[:half])
     second_half_energy = np.sum(total_energy_along_beam[half:])
@@ -464,7 +466,7 @@ for psi_deg in tqdm(psi_range):
     s_vals, theta_vals, x_vals, y_vals, mag_energy_along_beam, elas_energy_along_beam, _ = solve_deflection_angle_energy(magnet_position, psi1)
 
     theta_tip_vals.append(theta_vals[-1])
-    total_mag_energies.append(np.sum(mag_energy_along_beam))
+    # total_mag_energies.append(np.sum(mag_energy_along_beam))
     total_elas_energies.append(np.sum(elas_energy_along_beam))
 
 # Unwrap and compute snapping sensitivity
@@ -489,7 +491,7 @@ axs[0, 1].set_title("Snapping Sensitivity (Derivative)")
 axs[0, 1].grid(True)
 
 # Total Magnetic Energy
-axs[1, 0].plot(psi_range, total_mag_energies, label='Magnetic')
+# axs[1, 0].plot(psi_range, total_mag_energies, label='Magnetic')
 axs[1, 0].plot(psi_range, total_elas_energies, label='Elastic', linestyle='--')
 axs[1, 0].set_xlabel("ψ₁ (deg)")
 axs[1, 0].set_ylabel("Total Energy (J)")
@@ -498,7 +500,7 @@ axs[1, 0].legend()
 axs[1, 0].grid(True)
 
 # Placeholder arc-wise energy for visual consistency
-axs[1, 1].plot(s_vals, mag_energy_along_beam, label='Magnetic Energy Density')
+# axs[1, 1].plot(s_vals, mag_energy_along_beam, label='Magnetic Energy Density')
 axs[1, 1].plot(s_vals, elas_energy_along_beam, label='Elastic Energy Density', linestyle='--')
 axs[1, 1].set_xlabel("Beam Arc Length s (m)")
 axs[1, 1].set_ylabel("Energy (J)")
