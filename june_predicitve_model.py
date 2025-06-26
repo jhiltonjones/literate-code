@@ -42,7 +42,7 @@ plot = False
 
 #     print(f"Logged: {log_entry.strip()}")
 translate = True
-max_attempts = 50
+max_attempts = 40
 
 distance = 160
 steps = distance_to_steps(distance)
@@ -116,15 +116,7 @@ for i in range(24):  # Go beyond 12 if your config might use more
 setp.input_bit_registers0_to_31 = 0
 watchdog.input_int_register_0 = 0
 
-# Send zeroed setup to robot
-con.send(setp)
-con.send(watchdog)
-
-
-setp.input_double_register_12 = 0
-setp.input_double_register_13 = 0
-setp.input_double_register_14 = 0
-setp.input_double_register_15 = 0
+# Send zeroed setup to robot28 = 0
 setp.input_double_register_16 = 0
 setp.input_double_register_17 = 0
 setp.input_bit_registers0_to_31 = 0
@@ -139,8 +131,8 @@ transformed_points = transform_point(T, d, h)
 x_robotic_arm = transformed_points[0]
 y_robotic_arm = transformed_points[1]
 
-start_point = [0.9147010540826014, -0.46869447847725715, 0.27608444448231034, -3.107199363893186, -0.3989044391666398, 0.009094121436657948]
-start_point2 = [-0.30395204225649053, -2.2527348003783167, -1.3683218955993652, -1.0997814399055024, 1.5787557363510132, 4.153120040893555]
+start_point = [0.8591984247948907, -0.2714764828605954, 0.20603768069158077, 2.3911077741703193, -1.9880074589982653, 0.02729820295870479]
+start_point2 = [-0.107215706502096, -2.141261716882223, -1.714442491531372, -0.8591966790011902, 1.5362006425857544, -0.2898953596698206]
 
 waypoints = [
     [-2.2383063475238245, -1.846382280389303, 2.72556716600527, 3.8191911417194824, -1.6096790472613733, 0.7579470872879028],
@@ -239,7 +231,7 @@ while attempts < max_attempts:
                 else:
                     print("SPEED Fast")
                     arduino_queue.put((f'ON {steps}', 20))  # fastest
-        if rod_pos[0] < 80:
+        if rod_pos[0] < 4:
             print("STOP")
             final = 0
             arduino_queue.put((f'ON {final}', 10))
@@ -255,10 +247,10 @@ while attempts < max_attempts:
         calc_newx, calc_newy, deg_out = position_mapping(rod_pos, using_tcp_pose[0], using_tcp_pose[1], using_pos[5], np.deg2rad(alignment_angle), x_alignment)
         print(f"Robot Frame Reconstructed: x = {calc_newx:.3f}, y = {calc_newy:.3f}, Rotation = {deg_out}")
 
-        # Keep a fixed pose orientation
-        position = [calc_newx, calc_newy, 0.27608444448231034, -3.107199363893186, -0.3989044391666398, 0.009094121436657948]
-        calc_newy = np.clip(calc_newy, -0.6239054718941721, -0.2939327215024257)
-        calc_newx = np.clip(calc_newx, 0.5738125225986604, 1.0368513948595706)
+        calc_newy = np.clip(calc_newy, -0.28783092606121824, -0.2620238325256563)
+        calc_newx = np.clip(calc_newx, 0.8283644117470766, 0.9338182218499528)
+        position = [calc_newx, calc_newy, 0.20603768069158077, 2.3911077741703193, -1.9880074589982653, 0.02729820295870479]
+
         list_to_setp(setp, position, offset=12)
         joints_off = get_inverse(con, setp, position)
 
@@ -266,7 +258,7 @@ while attempts < max_attempts:
             joint6_angle = joints_off[5]
 
         joint6_angle = (deg_out)
-        joint6_angle = np.clip(joint6_angle, 1.0867736339569092, 5.501124382019043)
+        joint6_angle = np.clip(joint6_angle, -3.783248488103048, 1.0)
 
         # if tip == "Below":
         #     joint6_angle -= rotation_step

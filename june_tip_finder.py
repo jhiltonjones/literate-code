@@ -61,34 +61,32 @@ def detect_rod_tip_yellow_right(image_path, graph=False):
     image = cv2.imread(image_path)
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    mask_x = (np.arange(image.shape[1]) >= 60) & (np.arange(image.shape[1]) <= 415)
+    mask_x = (np.arange(image.shape[1]) >= 37) & (np.arange(image.shape[1]) <= 415)
     x_indices = np.where(mask_x)[0]
-    mask_y = (np.arange(image.shape[0]) > 130) & (np.arange(image.shape[0]) <= 280)
+    mask_y = (np.arange(image.shape[0]) > 65) & (np.arange(image.shape[0]) <= 230)
     y_indices = np.where(mask_y)[0]
 
-    yellow_ranges = [
-        (np.array([20, 150, 200]), np.array([40, 255, 255])),
-        (np.array([18, 120, 180]), np.array([42, 255, 255])),
-        (np.array([16, 100, 150]), np.array([44, 255, 255])),
-        (np.array([15, 80, 120]),  np.array([45, 255, 255]))
+    red_ranges = [
+        (np.array([0, 50, 50]), np.array([10, 255, 255])),     # lower reds
+        (np.array([160, 50, 50]), np.array([180, 255, 255]))   # upper reds
     ]
 
-    yellow_mask = None
+    red_mask = None
     largest_contour = None
 
-    for i, (lower_yellow, upper_yellow) in enumerate(yellow_ranges):
-        temp_mask = cv2.inRange(image_hsv, lower_yellow, upper_yellow)
+    for lower_red, upper_red in red_ranges:
+        temp_mask = cv2.inRange(image_hsv, lower_red, upper_red)
         region_mask = np.zeros_like(temp_mask)
         region_mask[np.ix_(y_indices, x_indices)] = 1
-        masked_yellow = cv2.bitwise_and(temp_mask, temp_mask, mask=region_mask.astype(np.uint8))
-        contours, _ = cv2.findContours(masked_yellow, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        masked_red = cv2.bitwise_and(temp_mask, temp_mask, mask=region_mask.astype(np.uint8))
+        contours, _ = cv2.findContours(masked_red, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if contours:
             largest_contour = max(contours, key=cv2.contourArea)
-            yellow_mask = masked_yellow
+            red_mask = masked_red
             break
 
     if largest_contour is None:
-        raise ValueError("No yellow tip found in any HSV range.")
+        raise ValueError("No red tip found in any HSV range.")
 
     rod_tip_point = min(largest_contour[:, 0, :], key=lambda p: p[0])
 
@@ -137,21 +135,19 @@ def detect_rod_tip_yellow_right(image_path, graph=False):
     # )
 
     ring_coords = np.array([
-    (379.3, 225.1),
-    (347.4, 223.7),
-    (319.4, 220.4),
-    (294.1, 213.7),
-    (280.1, 205.1),
-    (267.4, 194.4),
-    (254.1, 190.4),
-    (232.1, 201.1),
-    (218.8, 205.1),
-    (200.2, 213.1),
-    (170.2, 225.7),
-    (146.9, 233.1),
-    (116.9, 237.7),
-    (76.3, 247.7),
-    (38.3, 249.0)
+    (391.0, 157.3),
+    (354.1, 154.1),
+    (320.5, 143.4),
+    (286.9, 128.7),
+    (267.3, 121.3),
+    (250.9, 121.3),
+    (229.6, 127.8),
+    (195.2, 145.9),
+    (173.9, 161.4),
+    (146.9, 172.1),
+    (108.4, 181.9),
+    (60.0, 186.0),
+    (4.3, 189.3)
     ])
     tck, _ = splprep(ring_coords.T, s=0)
     u_fine = np.linspace(0, 1, 400)
@@ -162,7 +158,7 @@ def detect_rod_tip_yellow_right(image_path, graph=False):
     distances = np.linalg.norm(spline_points - tip_point, axis=1)
     closest_index = np.argmin(distances)
     closest_spline_x, closest_spline_y = spline_points[closest_index]
-    scale_pixels_per_mm = 2.35
+    scale_pixels_per_mm = 2.04
 
     spline_coords = np.array([x_spline, y_spline]).T
     deltas = np.diff(spline_coords, axis=0)

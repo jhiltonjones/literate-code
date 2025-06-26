@@ -39,7 +39,7 @@ def joint_rad_to_custom_degrees(theta_rad, x_alignment_deg):
     Convert joint angle in radians to custom degrees based on rod's x-alignment in degrees.
     Assumes rad_0_deg = 4.153112888336182 when aligned with x-axis.
     """
-    rad_0_deg = 4.153112888336182
+    rad_0_deg = -0.32156354585756475
     rad_90_deg = rad_0_deg + np.pi / 2  # Approximate 90° in radians = π/2
 
     m = (90) / (rad_90_deg - rad_0_deg)
@@ -52,7 +52,7 @@ def custom_degrees_to_joint_rad(custom_deg, x_alignment_deg):
     """
     Convert custom degrees back to joint radians based on rod's x-alignment.
     """
-    rad_0_deg = 4.153112888336182
+    rad_0_deg = -0.32156354585756475
     rad_90_deg = rad_0_deg + np.pi / 2
 
     m = (90) / (rad_90_deg - rad_0_deg)
@@ -73,8 +73,8 @@ def robot_to_inverse_frame(robot_x, robot_y):
     """
     # origin_robot_x = 0.30998441861443216
     # origin_robot_y = 0.491167008966276
-    origin_robot_x = 0.88621
-    origin_robot_y = -0.19763
+    origin_robot_x = 0.84190
+    origin_robot_y = -0.10471
     inv_x = robot_x - origin_robot_x
     inv_y = robot_y - origin_robot_y
     inv_x = -1* inv_x
@@ -89,8 +89,8 @@ def inverse_to_robot_frame(inv_x, inv_y):
     Returns:
         robot_x, robot_y
     """
-    origin_robot_x = 0.88621
-    origin_robot_y = -0.19763
+    origin_robot_x = 0.84190
+    origin_robot_y = -0.10471
 
     robot_x = origin_robot_x - inv_x
     robot_y = origin_robot_y - inv_y

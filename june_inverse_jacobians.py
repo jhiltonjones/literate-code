@@ -201,7 +201,7 @@ def sympy_solver(angle, x_var, angle2):
             if iter % 1000 == 0:
                 print("Jacobian:", J_theta)
     print(f"\nBest solution found for {np.rad2deg(angle2)}:")
-    best_x[0] -= 0.025
+    best_x[0] -= 0.035
     print(f"x = {best_x[0]:.4f} m\ny = {best_x[1]:.4f} m\nangle = {best_x[2]:.2f} deg")
     print(f"Final error = {rad2deg(best_error):.4f} deg")
     return best_x[0], best_x[1], best_x[2] 

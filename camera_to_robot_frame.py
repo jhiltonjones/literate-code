@@ -6,11 +6,11 @@ from new_tip_finder import detect_rod_tip_darkest_right
 from june_tip_finder import detect_rod_tip_yellow_right
 def pixel_to_robot_frame(pixel_x, pixel_y):
     # Reference: known pixel and robot coordinates
-    ref_pixel = np.array([181.84, 253.27])             # pixel_x, pixel_y
-    ref_robot = np.array([0.9133455802627718, -0.25720637440350974])          # robot_x, robot_y
+    ref_pixel = np.array([172.75, 192.23])             # pixel_x, pixel_y
+    ref_robot = np.array([0.8611301277494388, -0.19307271447934948])          # robot_x, robot_y
 
     # Scale conversion
-    scale_pixels_per_mm = 2.00
+    scale_pixels_per_mm = 2.04
     mm_per_pixel = 1 / scale_pixels_per_mm
 
     # Compute pixel deltas
