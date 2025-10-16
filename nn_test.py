@@ -1,6 +1,6 @@
 import torch, numpy as np
 from neural_net import SimpleMLP
-
+#testing
 # f(j) = predicted angle (deg), df/dj via autograd
 def f_and_df(model, j_val):
     x = torch.tensor([[j_val]], dtype=torch.float32, requires_grad=True)
