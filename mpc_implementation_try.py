@@ -19,7 +19,13 @@ import csv, shutil
 import torch
 from neural_net import SimpleMLP
 from nn_test import solve_joint6_for_angle
+from neural_net import SimpleMLP
+import torch
+# --- before the loop, build the controller once ---
+from mpc_controller import MPCController
 
+# nn_theta_jacobian.py
+import torch, numpy as np
 class AngleUnwrapper:
     def __init__(self): self.prev = None
     def __call__(self, a):
@@ -98,6 +104,56 @@ def detect_red_points_and_angle(image_path, show=False):
         plt.show()
 
     return pt1, pt2, angle
+def make_theta_J_from_model(model: torch.nn.Module):
+    """Return (theta_fn, J_fn) from a PyTorch model mapping ψ(rad)->θ(deg)."""
+    model.eval()
+    try:
+        device = next(model.parameters()).device
+    except StopIteration:
+        device = torch.device("cpu")
+
+    def theta_fn(psi_rad: float) -> float:
+        with torch.no_grad():
+            x = torch.tensor([[float(psi_rad)]], dtype=torch.float32, device=device)
+            y_deg = model(x).item()           # θ in degrees
+        return np.deg2rad(y_deg)              # θ in radians
+
+    def J_fn(psi_rad: float) -> float:
+        x = torch.tensor([[float(psi_rad)]], dtype=torch.float32, device=device, requires_grad=True)
+        y_deg = model(x)                      # θ in degrees
+        (dy_dpsi_deg_per_rad,) = torch.autograd.grad(y_deg, x, torch.ones_like(y_deg), retain_graph=False)
+        # Convert deg/rad -> rad/rad:
+        return float(dy_dpsi_deg_per_rad.item()) * (np.pi / 180.0)
+
+    return theta_fn, J_fn
+
+
+# Load your trained model (CPU is fine; GPU works too)
+model = SimpleMLP()
+model.load_state_dict(torch.load("simple_mlp.pt", map_location="cpu"))
+model.eval()
+
+theta_fn, J_fn = make_theta_J_from_model(model)
+dt = 0.1
+controller = MPCController(
+    theta_fn=theta_fn,
+    J_fn=J_fn,
+    dt=dt,
+    Np=5,                 # you used 5 in the sim main
+    w_th=10.0,
+    w_u=0.05,
+    theta_band_deg=np.inf,    # no band in your sim run (you had error_threshold=np.inf)
+    eps_theta_deg=10.0,
+    h_deg_for_radius=0.5,
+    trust_region_deg=180.0,
+    theta_max_deg=90.0,
+    u_max_deg_s=90.0,
+    j6_min_rad=-2.9,
+    j6_max_rad=+2.9,
+    rate_limit_deg=15.0
+)
+
+
 RUN_ROOT = Path("NN_control")
 RUN_DIR = RUN_ROOT / datetime.now().strftime("%Y%m%d_%H%M%S")
 RUN_DIR.mkdir(parents=True, exist_ok=True)
@@ -193,28 +249,16 @@ def main():
     watchdog.input_int_register_0 = 2
     con.send(watchdog)
     state = con.receive()
+    joint_pos = state.actual_q
     # logs
-    # --- before the loop, load the forward NN once ---
-    model = SimpleMLP()
-    model.load_state_dict(torch.load("simple_mlp.pt", map_location="cpu"))
-    model.eval()
+    # initialise ψ to current joint 6 (read it once from robot state if available)
+    controller.set_initial_psi(joint_pos[5])
 
-    # logs
-    t_log, ref_deg_log, meas_deg_log = [], [], []
-    err_deg_log, j6_rad_log = [], []
-
-    # sine ref params
+    # sine reference params (same as your NN code)
     A_deg, bias_deg, freq_hz, phase_deg, duration_s = 15.0, 0.0, 0.02, 0.0, 60.0
     A_rad     = np.deg2rad(A_deg)
     bias_rad  = np.deg2rad(bias_deg)
     phase_rad = np.deg2rad(phase_deg)
-    dt = 0.1
-
-    # joint 6 limits (rad)
-    # J6_MIN = JOINT_TARGET[5] - np.pi/2
-    # J6_MAX = JOINT_TARGET[5] + np.pi/2
-
-    joint_pos = JOINT_TARGET.copy()
 
     t0 = time.time()
     while True:
@@ -222,35 +266,24 @@ def main():
         if t > duration_s:
             break
 
-        # 1) measure current angle
+        # 1) measure θ (deg) from vision
         new_capture()
         image_path = "/home/jack/literate-code/focused_image.jpg"
         _, _, angle_deg = detect_red_points_and_angle(image_path)
+        theta_meas_rad = np.deg2rad(angle_deg)
 
-        # 2) reference (both rad & deg, solver needs deg)
-        ref_rad = bias_rad + A_rad * np.sin(2.0 * np.pi * freq_hz * t + phase_rad)
-        ref_deg = float(np.rad2deg(ref_rad))
+        # 2) reference θ (rad)
+        ref_theta_rad = bias_rad + A_rad * np.sin(2.0 * np.pi * freq_hz * t + phase_rad)
 
-        # 3) error (for logging only)
-        err_deg = ref_deg - angle_deg
+        # 3) MPC step -> absolute ψ command for joint 6
+        j6_cmd_rad, info = controller.step(ref_theta_rad, theta_meas_rad)
 
-        # 4) invert forward model: angle(deg) -> joint6(rad)
-        j6_sol, ok = solve_joint6_for_angle(
-            model, target_deg=ref_deg, j_min=-2.9, j_max=+2.9, x0=joint_pos[5]
-        )
-        # clamp to your safe window
-        # j6_cmd = float(np.clip(j6_sol, J6_MIN, J6_MAX))
-
-        # Optional: rate-limit joint changes (gentler motion)
-        # max_step = np.deg2rad(1.0)  # 1 deg/iter
-        # j6_cmd = float(np.clip(j6_cmd, joint_pos[5] - max_step, joint_pos[5] + max_step))
-
-        # 5) send full 6D target with updated joint 6
-        joint_pos[5] = j6_sol
+        # 4) send full 6D target with updated joint 6
+        joint_pos[5] = j6_cmd_rad
         list_to_setp(setp, joint_pos, offset=6)
         con.send(setp)
 
-        # 6) busy-bit wait
+        # 5) busy-bit wait (unchanged)
         while True:
             state = con.receive()
             con.send(watchdog)
@@ -258,18 +291,15 @@ def main():
                 break
             time.sleep(0.005)
 
-        # 7) log
+        # 6) logging
+        ref_deg = float(np.rad2deg(ref_theta_rad))
+        err_deg = ref_deg - angle_deg
         print(f"t={t:5.2f}s  ref={ref_deg:6.2f}°  meas={angle_deg:6.2f}°  "
-            f"err={err_deg:6.2f}°  j6={joint_pos[5]:.3f} rad  [{'ok' if ok else 'extr'}]")
-
-        t_log.append(t)
-        ref_deg_log.append(ref_deg)
-        meas_deg_log.append(angle_deg)
-        err_deg_log.append(err_deg)
-        j6_rad_log.append(joint_pos[5])
+            f"err={err_deg:6.2f}°  j6={joint_pos[5]:.3f} rad  [{info['status']}]")
 
         time.sleep(dt)
-    # --- end NN-tracking section ---
+
+
 
     # proceed with next mode
     watchdog.input_int_register_0 = 3
@@ -279,33 +309,6 @@ def main():
     con.send_pause()
     con.disconnect()
 
-    # Save figures
-    ( RUN_DIR / "plots" ).mkdir(exist_ok=True)
-    plt.figure(figsize=(10, 6))
-    plt.plot(t_log, ref_deg_log, label="Reference (deg)", linewidth=2)
-    plt.plot(t_log, meas_deg_log, label="Measured (deg)", linewidth=1.5)
-    plt.grid(True, linestyle="--", alpha=0.5)
-    plt.xlabel("Time (s)"); plt.ylabel("Angle (deg)")
-    plt.title("Sine Tracking: Reference vs Measured"); plt.legend(); plt.tight_layout()
-    plt.savefig(RUN_DIR / "plots" / "angles_ref_meas.png", dpi=200)
-
-    plt.figure(figsize=(10, 4))
-    plt.plot(t_log, err_deg_log, label="Error (deg)")
-    plt.grid(True, linestyle="--", alpha=0.5)
-    plt.xlabel("Time (s)"); plt.ylabel("Error (deg)")
-    plt.title("Tracking Error"); plt.legend(); plt.tight_layout()
-    plt.savefig(RUN_DIR / "plots" / "error.png", dpi=200)
-
-
-    plt.figure(figsize=(10, 4))
-    plt.plot(t_log, j6_rad_log, label="Joint 6 (rad)")
-    plt.grid(True, linestyle="--", alpha=0.5)
-    plt.xlabel("Time (s)"); plt.ylabel("Joint 6 (rad)")
-    plt.title("Joint 6 Command"); plt.legend(); plt.tight_layout()
-    plt.savefig(RUN_DIR / "plots" / "j6.png", dpi=200)
-
-    plt.show()
-    print(f"[LOG] Plots saved under {RUN_DIR/'plots'}")
 
 
 if __name__ == "__main__":

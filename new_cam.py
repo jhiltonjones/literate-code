@@ -63,6 +63,20 @@ def new_capture(filename='focused_image.jpg', focus=255):
     else:
         raise RuntimeError("Failed to capture image")
 # ─── IMAGE PROCESSING ────────────────────────────────────────────────────
+class AngleUnwrapper:
+    def __init__(self): self.prev = None
+    def __call__(self, a):
+        if self.prev is None:
+            self.prev = a
+            return a
+        delta = a - self.prev
+        if   delta > 180.0: a -= 360.0
+        elif delta < -180.0: a += 360.0
+        self.prev = a
+        return a
+
+unwrap_angle = AngleUnwrapper()
+
 def compute_signed_angle(v1, v2):
     """Returns the signed angle in degrees from v1 to v2 (positive = CCW, negative = CW)"""
     angle1 = np.arctan2(v1[1], v1[0])
@@ -109,11 +123,15 @@ def detect_red_points_and_angle(image_path, show=True):
             red_centers.append((cx, cy))
             cv2.circle(image, (cx, cy), 5, (255, 0, 0), -1)
 
-    pt1, pt2 = red_centers
-    vector = np.array(pt2) - np.array(pt1)
-    reference = np.array([1, 0])  # x-axis
+    # after you get red_centers
+    red_centers.sort(key=lambda p: (p[0], p[1]))  # sort by x then y
+    pt1, pt2 = red_centers  # pt1 = leftmost, pt2 = rightmost
 
-    angle = compute_signed_angle(reference, vector)
+    vector = np.array(pt2) - np.array(pt1)
+    reference = np.array([1.0, 0.0])
+    raw_angle = compute_signed_angle(reference, vector)  # in degrees
+    angle = unwrap_angle(raw_angle)                      # use this instead of raw_angle
+
 
     if show:
         cv2.line(image, pt1, pt2, (0, 255, 0), 2)
