@@ -126,7 +126,7 @@ print("---------------Successfully connected to the robot-------------\n")
 con.get_controller_version()
 
 
-FREQUENCY = 500  
+FREQUENCY = 125  
 con.send_output_setup(state_names, state_types, FREQUENCY)
 setp = con.send_input_setup(setp_names, setp_types)
 watchdog = con.send_input_setup(watchdog_names, watchdog_types)
@@ -181,8 +181,8 @@ if not con.send_start():
 # start_point2= [-0.7160909811602991, -2.522921701470846, -1.1784803867340088, -1.0388308328441163, 1.5985084772109985, 2.754650354385376]
 # start_point = [0.7179914754082709, -0.8719754891495058, 0.11356769992291205, -2.5283311228316894, -1.8074488214930953, -0.028050609716091583]#tcp 0cm 16cm in y
 # start_point2= [-0.7295210997210901, -2.546648164788717, -1.1302876472473145, -1.0636816185763855, 1.598206639289856, 2.7410993576049805]
-start_point = [0.7180010214182344, -0.8119068408012123, 0.11358855342237718, -2.430971729740251, -1.9380154621059815, -0.030744347697173845]#tcp 0cm 16cm in y
-start_point2= [-0.6880562941180628, -2.47835697750234, -1.2690455913543701, -0.992119626407959, 1.5991392135620117, 2.678036689758301]
+start_point = [0.6863321291366229, -0.5298007815755799, 0.3988518734916411, 2.0782071104836115, -2.307145711170106, 0.0024772068811600738]#tcp 0cm 16cm in y
+start_point2= [-0.4509013334857386, -1.9217506847777308, -1.6537261009216309, -1.148660497074463, 1.538709282875061, -0.34603721300234014]
 
 
 start_point_list = setp_to_list(setp, offset=0)
@@ -203,7 +203,11 @@ print("-------Executing moveJ -----------\n")
 
 watchdog.input_int_register_0 = 1
 con.send(watchdog)
-start_point2[5] = start_point2[5] - np.pi/2
+state = con.receive()
+joint_state_start = state.actual_q
+start_point2[5] = start_point2[5] 
+# start_point2[5] = start_point3[5] 
+
 # list_to_setp(setp, start_point, offset=12)
 list_to_setp(setp, start_point2, offset=6)
 
@@ -232,21 +236,51 @@ initial_joints = list(state.actual_q)
 attempts = 0
 max_attempts = 150
 increment = 0.03  # Radians per attempt
-max_angle = initial_joints[5] + np.pi
-
+# max_angle = start_point2[5] + np.pi/2
+max_angle = start_point2[5] + np.pi
 while attempts < max_attempts:
     try:
-        joints_off = list(initial_joints)
+        joints_off = list(start_point2)
         joints_off[5] += increment * (attempts + 1)
 
         print(f"joints_off[5] = {joints_off[5]:.4f}, max_angle = {max_angle:.4f}")
 
-        if joints_off[5] > max_angle:
+
+        # If this step would exceed the limit, log it and then stop
+        if joints_off[5] >= max_angle - 1e-6:
+            print("Max angle exceeded. Logging this final attempted setpoint and stopping.")
+            if log:
+                state = con.receive()
+                joint_state = state.actual_q
+                tcp_state = state.actual_TCP_pose
+                output_file = "results9.xlsx"
+                data = {
+                    "Joint_1": [joints_off[0]],
+                    "Joint_2": [joints_off[1]],
+                    "Joint_3": [joints_off[2]],
+                    "Joint_4": [joints_off[3]],
+                    "Joint_5": [joints_off[4]],
+                    "Joint_6": [joints_off[5]],
+                    "x": [tcp_state[0]],
+                    "y": [tcp_state[1]],
+                    "z": [tcp_state[2]],
+                    "Beam_Angle_Deg": [angle],
+                    "Status": ["MAX_ANGLE_EXCEEDED"]
+                }
+                new_row = pd.DataFrame(data)
+                if os.path.exists(output_file):
+                    existing_df = pd.read_excel(output_file)
+                    updated_df = pd.concat([existing_df, new_row], ignore_index=True)
+                else:
+                    updated_df = new_row
+                updated_df.to_excel(output_file, index=False)
+                print(f"Saved to Excel: {output_file}")
             break
+
         print(f"Attempt {attempts + 1}: Moving to joint position → {joints_off}")
         list_to_setp(setp, joints_off, offset=6)
         con.send(setp)
-        time.sleep(0.2)
+
 
         while True:
             state = con.receive()
@@ -257,12 +291,14 @@ while attempts < max_attempts:
             if not state.output_bit_registers0_to_31:
                 print("Movement completed.")
                 break
-        time.sleep(0.01)
+
         # Define output file
         if log == True:
+            state = con.receive()
             joint_state = state.actual_q
+            print(f"Actual joint state is {joint_state[5]}")
             tcp_state = state.actual_TCP_pose
-            output_file = "results4.xlsx"
+            output_file = "results9.xlsx"
             new_capture()
             image_path = "/home/jack/literate-code/focused_image.jpg"
             pt1, pt2, angle = detect_red_points_and_angle(image_path)
@@ -306,8 +342,9 @@ while attempts < max_attempts:
 
 watchdog.input_int_register_0 = 3
 con.send(watchdog) 
-time.sleep(1.5) 
-
+state = con.receive()
+terminal_joint =state.actual_q
+print(f"terminal joint state is {terminal_joint[5]}")
 con.send_pause()
 con.disconnect()
 print("Disconnected")
