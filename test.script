@@ -1,0 +1,36 @@
+
+def rtde_handshake_and_move():
+
+  textmsg("RTDE demo: waiting for operator CONTINUE...")
+  popup("Boolean 1 is False.\nPress CONTINUE to allow the PC program to proceed.",
+        title="RTDE Handshake", warning=False, blocking=True)
+  set_output_bit_register(0, True)   # -> Python waits for this to become True
+
+
+  textmsg("Waiting for mode 1 (input_int_register_0 == 1)")
+  while (get_input_int_register(0) != 1):
+    sync()
+
+  q0 = get_input_double_register(6)
+  q1 = get_input_double_register(7)
+  q2 = get_input_double_register(8)
+  q3 = get_input_double_register(9)
+  q4 = get_input_double_register(10)
+  q5 = get_input_double_register(11)
+  q  = [q0, q1, q2, q3, q4, q5]
+
+  textmsg("Executing moveJ to target from regs 6..11")
+  movej(q, a=1.2, v=0.25)
+
+  set_output_bit_register(0, False)
+  textmsg("Move complete, Boolean 1 cleared")
+
+  textmsg("Waiting for mode 3 (input_int_register_0 == 3)")
+  while (get_input_int_register(0) != 3):
+    sync()
+
+  textmsg("Mode 3 received. Halting.")
+  stopj(2.0)
+end
+
+rtde_handshake_and_move()

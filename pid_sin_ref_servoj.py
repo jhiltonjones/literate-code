@@ -84,7 +84,7 @@ def list_to_setp(setp, lst, offset=0):
 ROBOT_HOST = "192.168.56.101"
 ROBOT_PORT = 30004
 CONFIG_XML = "control_loop_configuration.xml"
-FREQUENCY = 125  # use 125 if your controller prefers it
+FREQUENCY = 25  # use 125 if your controller prefers it
 
 # input_double_registers 6..11 hold the joint target q[0..5]
 JOINT_TARGET = [
@@ -182,73 +182,80 @@ def main():
     phase_rad = np.deg2rad(phase_deg)
 
     # PID gains (operate in radians)
-    Kp, Ki, Kd = 0.5, 0.00, 0.08
-    dt          = 0.1                # controller timestep (s)
+    # PID gains (operate in radians)
+    Kp, Ki, Kd = 0.5, 0.00, 0.08  # start with Ki=0; add later if needed
+
+    dt = 1.0 / FREQUENCY
+
+    Kp, Ki, Kd = 0.5, 0.0, 0.05      # slightly softer D
+    MAX_STEP = np.deg2rad(10)       # <= 0.5° change per 40ms cycle (tune up to 1–2° if stable)
+    ALPHA = 0.7                     # meas low-pass (0=no filter, 1=heavy filter)
 
     joint_pos = JOINT_TARGET.copy()
-    err_i = 0.0
-    prev_err_rad = None
-    dt = 1.0 / FREQUENCY   # 0.008 seconds per PID cycle
-
-    # If increasing joint6 increases measured angle, keep +1; else set -1
     SIGN = 1.0
-
-    # joint 6 limits (rad)
     J6_MIN = JOINT_TARGET[5] - np.pi/2
     J6_MAX = JOINT_TARGET[5] + np.pi/2
 
     t0 = time.time()
+    err_i = 0.0
+    prev_err_rad = None
+    meas_filt = None
+    next_tick = time.perf_counter()
+
     while True:
-        # elapsed time
         t = time.time() - t0
         if t > duration_s:
             break
 
-        # 1) measure current angle
+        # 1) measure angle
         new_capture()
         image_path = "/home/jack/literate-code/focused_image.jpg"
         _, _, angle_deg = detect_red_points_and_angle(image_path)
         angle_rad = np.deg2rad(angle_deg)
 
-        # 2) sine reference at time t
+        # low-pass the measurement to avoid jitter spikes -> accel errors
+        meas_filt = angle_rad if meas_filt is None else (1-ALPHA)*meas_filt + ALPHA*angle_rad
+
+        # 2) reference
         ref_rad = bias_rad + A_rad * np.sin(2.0 * np.pi * freq_hz * t + phase_rad)
 
-        # 3) PID on error (radians)
-        err_rad = ref_rad - angle_rad
-        derr = 0.0 if prev_err_rad is None else (err_rad - prev_err_rad) / dt
-        u_rad = Kp * err_rad + Ki * err_i + Kd * derr
+        # 3) PID
+        err_rad = ref_rad - meas_filt
+        err_i  += err_rad * dt
+        err_i = np.clip(err_i, np.deg2rad(-30), np.deg2rad(30))  # anti-windup
+        derr   = 0.0 if prev_err_rad is None else (err_rad - prev_err_rad) / dt
+        u_rad  = Kp * err_rad + Ki * err_i + Kd * derr
         prev_err_rad = err_rad
 
-        # 4) apply to joint 6 with sign and limits
-        joint_pos[5] = float(np.clip(joint_pos[5] + SIGN * u_rad, J6_MIN, J6_MAX))
+        # 4) APPLY with per-cycle rate limit (prevents accel violations)
+        step = np.clip(SIGN * u_rad, -MAX_STEP, MAX_STEP)
+        joint_pos[5] = float(np.clip(joint_pos[5] + step, J6_MIN, J6_MAX))
+
+        # write regs 6..11
         list_to_setp(setp, joint_pos, offset=6)
+        if "input_bit_registers0_to_31" in setp_names:
+            setp.input_bit_registers0_to_31 = 0
         con.send(setp)
 
-        # 5) wait for robot to finish small step (busy-bit handshake)
-        # while True:
-        #     state = con.receive()
-        #     con.send(watchdog)
-        #     if not state.output_bit_registers0_to_31:
-        #         break
-        #     time.sleep(0.005)
-        state = con.receive()
+        # 5) keepalive + precise pacing (ONLY one sleep here)
+        _ = con.receive()
         con.send(watchdog)
-        time.sleep(dt)
+        next_tick += dt
+        remaining = next_tick - time.perf_counter()
+        if remaining > 0:
+            time.sleep(remaining)
 
         # 6) log
         print(f"t={t:5.2f}s  ref={np.rad2deg(ref_rad):6.2f}°  "
-            f"meas={angle_deg:6.2f}°  err={np.rad2deg(err_rad):6.2f}°  "
+            f"meas={np.rad2deg(meas_filt):6.2f}°  err={np.rad2deg(err_rad):6.2f}°  "
             f"u={np.rad2deg(u_rad):5.2f}°  j6={joint_pos[5]:.3f} rad")
         t_log.append(t)
         ref_deg_log.append(np.rad2deg(ref_rad))
-        meas_deg_log.append(angle_deg)
+        meas_deg_log.append(np.rad2deg(meas_filt))
         err_deg_log.append(np.rad2deg(err_rad))
         u_deg_log.append(np.rad2deg(u_rad))
         j6_rad_log.append(joint_pos[5])
 
-        # 7) pacing
-        time.sleep(dt)
-    # --- end sine-tracking PID ---
 
     # proceed with next mode
     watchdog.input_int_register_0 = 3

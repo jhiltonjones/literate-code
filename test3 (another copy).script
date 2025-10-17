@@ -1,0 +1,70 @@
+# Handshake start: Boolean register 0 = False
+write_output_boolean_register(0, False)
+textmsg("RTDE demo: waiting for operator CONTINUE...")
+
+# Operator popup
+popup("Boolean 1 is False.\nPress CONTINUE to allow the PC program to proceed.",
+      title="RTDE Handshake", warning=False, blocking=True)
+
+# Signal Python: Boolean register 0 = True
+write_output_boolean_register(0, True)
+textmsg("Operator CONTINUE received. Boolean 1 set True.")
+
+# ===== MODE 1 =====
+textmsg("Waiting for mode 1 (input_int_register_0 == 1)")
+while (read_input_integer_register(0) != 1):
+  sync()
+end
+
+# Read joint target from input float registers 6..11
+q = [
+  read_input_float_register(6),
+  read_input_float_register(7),
+  read_input_float_register(8),
+  read_input_float_register(9),
+  read_input_float_register(10),
+  read_input_float_register(11)
+]
+
+textmsg("Mode 1: moveJ to regs 6..11")
+movej(q, a=1.2, v=0.25)
+
+# Signal completion: clear Boolean 1
+write_output_boolean_register(0, False)
+textmsg("Mode 1 complete. Boolean 1 cleared.")
+
+# ===== MODE 2: stream TCP poses via IK (regs 0..5) =====
+textmsg("Waiting for mode 2 (input_int_register_0 == 2)")
+while (read_input_integer_register(0) != 2):
+  sync()
+end
+textmsg("Mode 2: streaming TCP pose (regs 0..5) -> IK -> servoj")
+
+while (read_input_integer_register(0) == 2):
+  # TCP pose in base frame: meters & axis-angle radians
+  px = read_input_float_register(0)
+  py = read_input_float_register(1)
+  pz = read_input_float_register(2)
+  rx = read_input_float_register(3)
+  ry = read_input_float_register(4)
+  rz = read_input_float_register(5)
+
+  p  = p[px, py, pz, rx, ry, rz]   # URScript pose type
+  q  = get_inverse_kin(p)          # convert pose -> joints
+
+  servoj(q, t=0.04, lookahead_time=0.2, gain=100)
+  sync()
+end
+
+textmsg("Mode 2 ended")
+
+
+
+# ===== MODE 3 (halt) =====
+textmsg("Waiting for mode 3 (input_int_register_0 == 3)")
+while (read_input_integer_register(0) != 3):
+  sync()
+end
+
+textmsg("Mode 3 received. Halting.")
+stopj(2.0)

@@ -1,3 +1,5 @@
+#Joint State: [-0.3063767592059534, -2.1076585255064906, -0.702275276184082, -1.9189321003355921, 1.5413981676101685, -0.5084031263934534]
+#TCP Pose:  [0.8730334395676191, -0.4632732173554521, 0.7761266586348291, 2.4037096158647064, -1.9660304862843407, -0.006136965176345673]
 import sys
 import time
 import logging
@@ -94,20 +96,22 @@ JOINT_TARGET = [
 GRID_STEP = 0.01    # meters
 GRID_NX   = 3
 GRID_NY   = 3
-T_HOLD    = 3    # seconds per pose (reduce to fit more data)
+T_HOLD    = 0.5    # seconds per pose (reduce to fit more data)
 
 # Base TCP (z & base orientation)
-TCP0 = [0.6963224002959562, -0.5198430813848293, 0.39884843179050783, 0.8424327537377817, -2.993225498668037, 0.027335312411792267]
+#TCP0 = [0.6963224002959562, -0.5198430813848293, 0.39884843179050783, 0.8424327537377817, -2.993225498668037, 0.027335312411792267]
+TCP0 = [0.859411056542376, -0.7372250338219996, 0.39884843179050783, 0.8424327537377817, -2.993225498668037, 0.027335312411792267]
 
 # --- Simple 2D rotations to test (yaw about world Z, degrees) ---
-YAW_MIN_DEG = -20
-YAW_MAX_DEG =  0
+YAW_MIN_DEG = -80
+YAW_MAX_DEG =  80
 YAW_STEP_DEG = 5
 YAW_DEG_LIST = list(range(YAW_MIN_DEG, YAW_MAX_DEG + 1, YAW_STEP_DEG))
+X_CENTER_SHIFT = 0.0 # meters; +0.02 shifts the grid 2 cm in +X
 
 
 # Output file
-RESULTS_XLSX = "grid_results_with_yaw.xlsx"
+RESULTS_XLSX = "grid_results_with_yaw2.xlsx"
 
 def write_joint_target(setp, q, offset=6):
     for i in range(6):
@@ -200,7 +204,7 @@ def main():
 
     total_cells = GRID_NX * GRID_NY * len(YAW_DEG_LIST)
     done = 0
-    prev_yaw = None  # deg
+    prev_yaw = 12  # deg
 
     for iy in range(GRID_NY):
         for ix in range(GRID_NX):
@@ -215,7 +219,8 @@ def main():
                 R = R0 @ Rz(yaw_rad)
                 rx, ry, rz = rot_to_axis_angle(R)
 
-                target = [TCP0[0] + dx, TCP0[1] + dy, TCP0[2], rx, ry, rz]
+                target = [TCP0[0] + X_CENTER_SHIFT + dx, TCP0[1] + dy, TCP0[2], rx, ry, rz]
+
                 print(f"\n[{done}/{total_cells}] (ix,iy)=({ix},{iy}) dx={dx:+.3f} dy={dy:+.3f} | yaw={yaw_deg:+.1f}°")
 
                 # ------------ slow only big yaw jumps (>10°) over 10 seconds ------------

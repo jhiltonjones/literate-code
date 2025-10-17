@@ -1,0 +1,68 @@
+# Handshake start: Boolean register 0 = False
+write_output_boolean_register(0, False)
+textmsg("RTDE demo: waiting for operator CONTINUE...")
+
+# Operator popup
+popup("Boolean 1 is False.\nPress CONTINUE to allow the PC program to proceed.",
+      title="RTDE Handshake", warning=False, blocking=True)
+
+# Signal Python: Boolean register 0 = True
+write_output_boolean_register(0, True)
+textmsg("Operator CONTINUE received. Boolean 1 set True.")
+
+# ===== MODE 1 =====
+textmsg("Waiting for mode 1 (input_int_register_0 == 1)")
+while (read_input_integer_register(0) != 1):
+  sync()
+end
+
+# Read joint target from input float registers 6..11
+q = [
+  read_input_float_register(6),
+  read_input_float_register(7),
+  read_input_float_register(8),
+  read_input_float_register(9),
+  read_input_float_register(10),
+  read_input_float_register(11)
+]
+
+textmsg("Mode 1: moveJ to regs 6..11")
+movej(q, a=1.2, v=0.25)
+
+# Signal completion: clear Boolean 1
+write_output_boolean_register(0, False)
+textmsg("Mode 1 complete. Boolean 1 cleared.")
+
+# ===== MODE 2: stream joints from regs 12..17 =====
+textmsg("Waiting for mode 2 (input_int_register_0 == 2)")
+while (read_input_integer_register(0) != 2):
+  sync()
+end
+textmsg("Mode 2 active: streaming joints from regs 12..17")
+
+# Stream until mode changes (e.g., to 3)
+while (read_input_integer_register(0) == 2):
+  q2 = [
+    read_input_float_register(12),
+    read_input_float_register(13),
+    read_input_float_register(14),
+    read_input_float_register(15),
+    read_input_float_register(16),
+    read_input_float_register(17)
+  ]
+  # 125 Hz -> t ≈ 0.008s. Adjust if your PC loop rate differs.
+  servoj(q2, t=0.008, lookahead_time=0.1, gain=300)
+  sync()
+end
+
+textmsg("Mode 2 ended")
+
+
+# ===== MODE 3 (halt) =====
+textmsg("Waiting for mode 3 (input_int_register_0 == 3)")
+while (read_input_integer_register(0) != 3):
+  sync()
+end
+
+textmsg("Mode 3 received. Halting.")
+stopj(2.0)
