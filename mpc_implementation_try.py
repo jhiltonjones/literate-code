@@ -26,6 +26,7 @@ from mpc_controller import MPCController
 
 # nn_theta_jacobian.py
 import torch, numpy as np
+log=True
 class AngleUnwrapper:
     def __init__(self): self.prev = None
     def __call__(self, a):
@@ -134,30 +135,30 @@ model.load_state_dict(torch.load("simple_mlp.pt", map_location="cpu"))
 model.eval()
 
 theta_fn, J_fn = make_theta_J_from_model(model)
-dt = 0.1
 controller = MPCController(
     theta_fn=theta_fn,
     J_fn=J_fn,
-    dt=dt,
+    dt=0.2,
     Np=5,                 # you used 5 in the sim main
-    w_th=10.0,
-    w_u=0.05,
+    w_th=5.0,
+    w_u=1.0,
     theta_band_deg=np.inf,    # no band in your sim run (you had error_threshold=np.inf)
     eps_theta_deg=10.0,
     h_deg_for_radius=0.5,
     trust_region_deg=180.0,
-    theta_max_deg=90.0,
-    u_max_deg_s=90.0,
-    j6_min_rad=-2.9,
-    j6_max_rad=+2.9,
-    rate_limit_deg=15.0
+    theta_max_deg=180.0,
+    u_max_deg_s=180.0,
+    j6_min_rad=-5,
+    j6_max_rad=+5,
+    rate_limit_deg=180.0
 )
 
 
-RUN_ROOT = Path("NN_control")
+RUN_ROOT = Path("MPC_control")
 RUN_DIR = RUN_ROOT / datetime.now().strftime("%Y%m%d_%H%M%S")
 RUN_DIR.mkdir(parents=True, exist_ok=True)
 print(f"[LOG] Saving outputs to: {RUN_DIR}")
+(RUN_DIR / "plots").mkdir(exist_ok=True)
 
 def list_to_setp(setp, lst, offset=0):
     """ Converts a list into RTDE input registers, allowing different sets with offsets. """
@@ -172,8 +173,7 @@ FREQUENCY = 125  # use 125 if your controller prefers it
 
 # input_double_registers 6..11 hold the joint target q[0..5]
 JOINT_TARGET = [
--0.45088225999941045, -1.9217144451537074, -1.6537089347839355, -1.148652271633484, 1.538681983947754, 0.9267773628234863
-]
+-0.421221081410543, -1.99183716396474, -1.55251479148865, -1.18077780426059, 1.53922581672669, 1.06926810741425]
 JOINT_TARGET2 = [
 -0.4109237829791468, -1.8232914410033167, -1.5675734281539917, -1.3344539117864151, 1.5394864082336426, -3.662370030079977
 ]
@@ -246,44 +246,138 @@ def main():
             print('Start completed, proceeding to feedback check\n')
             break
 
+    # --- handshake to "Run" mode (your code) ---
     watchdog.input_int_register_0 = 2
     con.send(watchdog)
     state = con.receive()
-    joint_pos = state.actual_q
-    # logs
-    # initialise ψ to current joint 6 (read it once from robot state if available)
+    t_log = []
+    ref_seq_deg_log = []       # list of arrays (len Np) in degrees
+    ref_now_deg_log = []       # scalar: first element of ref_seq
+    meas_deg_log = []
+    theta_pred_deg_log = []    # list of arrays (len Np)
+    u0_deg_s_log = []
+    u_seq_deg_s_log = []       # list of arrays (len Np)
+    psi_now_rad_log = []
+    psi_cmd_rad_log = []
+    psi_pred_rad_log = []      # list of arrays (len Np)
+    qp_status_log = []         # 0 ok, 1 infeasible
+    # get current joints & init ψ (joint 6)
+    joint_pos = np.array(state.actual_q, dtype=float)  # radians
     controller.set_initial_psi(joint_pos[5])
 
-    # sine reference params (same as your NN code)
+    # --- sine reference in radians, same as sim ---
     A_deg, bias_deg, freq_hz, phase_deg, duration_s = 15.0, 0.0, 0.02, 0.0, 60.0
     A_rad     = np.deg2rad(A_deg)
     bias_rad  = np.deg2rad(bias_deg)
     phase_rad = np.deg2rad(phase_deg)
 
+    # RefStream-style helper (rad -> rad)
+    def ref_func(t):
+        return bias_rad + A_rad * np.sin(2.0*np.pi*freq_hz*t + phase_rad)
+
+    # simple drop-in replacement for RefStream.sequence(...)
+    def make_ref_seq(t0, Np, dt):
+        # horizon lookahead at t+dt, t+2dt, ..., t+Np*dt  (matches your sim)
+        return np.array([ref_func(t0 + (i+1)*dt) for i in range(Np)], dtype=float)
+
+    last_angle_deg = 0.0
+
+    # Adaptive timing init
     t0 = time.time()
+    last_tick = time.time()             # fresh timestamp to avoid tiny first dt
+
+    # Optional: smoothing for dt (EMA)
+    alpha_dt = 0.3                      # 0=no smoothing, 1=use last value entirely
+    dt_ema = None
+
     while True:
-        t = time.time() - t0
+        now = time.time()
+        t = now - t0
         if t > duration_s:
             break
 
-        # 1) measure θ (deg) from vision
+        # Measure actual loop period and update controller dt
+        dt_k_raw = now - last_tick
+        last_tick = now
+
+        # Clamp dt to sane bounds, e.g. 0.1s..1.5s (tune for your setup)
+        dt_k = float(np.clip(dt_k_raw, 0.10, 1.50))
+
+        # Optional: smooth
+        if dt_ema is None:
+            dt_ema = dt_k
+        else:
+            dt_ema = alpha_dt * dt_k + (1 - alpha_dt) * dt_ema
+
+        controller.set_dt(dt_ema)   # rebuilds S matrix etc.
+
+        # 1) measure θ (deg) from vision -> radians
         new_capture()
         image_path = "/home/jack/literate-code/focused_image.jpg"
-        _, _, angle_deg = detect_red_points_and_angle(image_path)
+        try:
+            _, _, angle_deg = detect_red_points_and_angle(image_path)
+        except Exception:
+            angle_deg = last_angle_deg  # reuse last on failure
         theta_meas_rad = np.deg2rad(angle_deg)
+        last_angle_deg = angle_deg
 
-        # 2) reference θ (rad)
-        ref_theta_rad = bias_rad + A_rad * np.sin(2.0 * np.pi * freq_hz * t + phase_rad)
+        # 2) build Np-step reference sequence using the same dt used by the controller
+        ref_seq = np.array([ref_func(t + (i+1)*dt_ema) for i in range(controller.Np)], float)
 
         # 3) MPC step -> absolute ψ command for joint 6
-        j6_cmd_rad, info = controller.step(ref_theta_rad, theta_meas_rad)
+        j6_cmd_rad, info = controller.step_with_seq(ref_seq, theta_meas_rad)
+
+        # --- pretty rollout table ---
+        Np = controller.Np
+        u_seq      = np.asarray(info["u_seq_rad_s"], float)         # (Np,)
+        psi_pred   = np.asarray(info["psi_pred_rad"], float)        # (Np,)
+        theta_pred = np.asarray(info["theta_pred_rad"], float)      # (Np,)
+        xref       = np.asarray(info["xref_seq_rad"], float)        # (Np,)
+        psi_k = info["psi_now_rad"]
+        h = np.deg2rad(0.2)
+        J_auto = float(J_fn(psi_k))
+        J_fd = float((theta_fn(psi_k + h) - theta_fn(psi_k - h)) / (2*h))
+        print(f"[J] psi={np.degrees(psi_k):.2f}°  J_auto={J_auto:.4e} rad/rad  J_fd={J_fd:.4e} rad/rad")
+
+        if np.all(np.isnan(theta_pred)):
+            print(f"[Rollout] (infeasible at t={t:.3f}s) — no prediction.")
+        else:
+            dpsi_step = u_seq * dt_ema                              # per-step ψ change
+            dpsi_cum  = controller.S_np @ u_seq                     # cumulative ψ change
+            err       = theta_pred - xref
+
+            psi_k = info["psi_now_rad"]
+            header = (f"\n[Rollout] t={t:.3f}s  ψ_k={np.degrees(psi_k):+.2f}°  "
+                    f"dt={dt_ema:.3f}s  max|Δψ|={np.max(np.abs(np.degrees(dpsi_cum))):.2f}°  "
+                    f"max|θ̂−R|={np.max(np.abs(np.degrees(err))):.2f}°")
+            print(header)
+            print(" i |   u_i [deg/s] |  Δψ_i(step) [deg] |  Δψ_i(cum) [deg] |  ψ̂_i [deg] |  θ̂_i [deg] |  R_i [deg] | θ̂_i−R_i [deg]")
+            for i in range(Np):
+                print(f"{i+1:2d} | "
+                    f"{np.degrees(u_seq[i]):+12.2f} | "
+                    f"{np.degrees(dpsi_step[i]):+16.2f} | "
+                    f"{np.degrees(dpsi_cum[i]):+15.2f} | "
+                    f"{np.degrees(psi_pred[i]):+10.2f} | "
+                    f"{np.degrees(theta_pred[i]):+10.2f} | "
+                    f"{np.degrees(xref[i]):+9.2f} | "
+                    f"{np.degrees(err[i]):+12.2f}")
+        # One-step nonlinear vs linear check (right after step_with_seq)
+        theta_pred_rad = np.asarray(info["theta_pred_rad"], float)  # (Np,)
+        if theta_pred_rad.size > 0 and np.isfinite(theta_pred_rad[0]):
+            theta_lin_next = np.rad2deg(theta_pred_rad[0])
+        else:
+            theta_lin_next = np.nan
+
+        theta_nl_next = np.rad2deg(theta_fn(info['psi_now_rad'] + info['u0_rad_s'] * dt_ema))
+        print(f"    θ_next_nl≈{theta_nl_next:5.2f}° vs θ_next_lin≈{theta_lin_next:5.2f}°")
+
 
         # 4) send full 6D target with updated joint 6
         joint_pos[5] = j6_cmd_rad
         list_to_setp(setp, joint_pos, offset=6)
         con.send(setp)
 
-        # 5) busy-bit wait (unchanged)
+        # 5) busy-bit wait
         while True:
             state = con.receive()
             con.send(watchdog)
@@ -292,14 +386,30 @@ def main():
             time.sleep(0.005)
 
         # 6) logging
-        ref_deg = float(np.rad2deg(ref_theta_rad))
-        err_deg = ref_deg - angle_deg
-        print(f"t={t:5.2f}s  ref={ref_deg:6.2f}°  meas={angle_deg:6.2f}°  "
-            f"err={err_deg:6.2f}°  j6={joint_pos[5]:.3f} rad  [{info['status']}]")
+        ref_now_deg = float(np.rad2deg(ref_seq[0]))
+        err_deg = ref_now_deg - angle_deg
+        print(f"t={t:5.2f}s  dt={dt_ema:.3f}s  ref={ref_now_deg:6.2f}°  meas={angle_deg:6.2f}°  "
+            f"err={err_deg:6.2f}°  j6={joint_pos[5]:.3f} rad  "
+            f"u0={np.rad2deg(info['u0_rad_s']):6.2f}°/s  [{info['status']}]")
 
-        time.sleep(dt)
+        # append scalars
+        t_log.append(t)
+        ref_now_deg_log.append(ref_now_deg)
+        meas_deg_log.append(angle_deg)
+        u0_deg_s_log.append(float(np.rad2deg(info['u0_rad_s'])))
+        psi_now_rad_log.append(float(info['psi_now_rad']))
+        psi_cmd_rad_log.append(float(info['psi_cmd_rad']))
+        qp_status_log.append(1 if info['infeasible'] else 0)
+
+        # append sequences
+        ref_seq_deg_log.append(np.rad2deg(info['xref_seq_rad']).astype(float))
+        theta_pred_deg_log.append(np.rad2deg(info['theta_pred_rad']).astype(float))
+        u_seq_deg_s_log.append(np.rad2deg(info['u_seq_rad_s']).astype(float))
+        psi_pred_rad_log.append(info['psi_pred_rad'].astype(float))
 
 
+        tp = theta_pred_deg_log[-1]
+        print(f"  θ_pred[+1..+{controller.Np}] ≈ {np.array2string(tp, precision=1, separator=', ')}")
 
     # proceed with next mode
     watchdog.input_int_register_0 = 3
@@ -308,7 +418,89 @@ def main():
     time.sleep(0.1)
     con.send_pause()
     con.disconnect()
+    # -------- pack logs (AFTER the loop) --------
+    t_arr            = np.array(t_log, dtype=float)
+    ref_now_deg_arr  = np.array(ref_now_deg_log, dtype=float)
+    meas_deg_arr     = np.array(meas_deg_log, dtype=float)
+    u0_deg_s_arr     = np.array(u0_deg_s_log, dtype=float)
+    psi_now_rad_arr  = np.array(psi_now_rad_log, dtype=float)
+    psi_cmd_rad_arr  = np.array(psi_cmd_rad_log, dtype=float)
+    qp_infeas_arr    = np.array(qp_status_log, dtype=int)
+    err_deg_arr      = ref_now_deg_arr - meas_deg_arr
 
+    # horizon (ragged per-step arrays -> object dtype for NPZ)
+    ref_seq_deg_obj     = np.array(ref_seq_deg_log, dtype=object)
+    theta_pred_deg_obj  = np.array(theta_pred_deg_log, dtype=object)
+    u_seq_deg_s_obj     = np.array(u_seq_deg_s_log, dtype=object)
+    psi_pred_rad_obj    = np.array(psi_pred_rad_log, dtype=object)
+    if log == True:
+        # -------- save files --------
+        # 1) scalars CSV
+        with open(RUN_DIR / "scalars.csv", "w") as f:
+            f.write("t,ref_now_deg,meas_deg,err_deg,u0_deg_s,psi_now_rad,psi_cmd_rad,qp_infeasible\n")
+            for i in range(len(t_arr)):
+                f.write(f"{t_arr[i]:.6f},{ref_now_deg_arr[i]:.6f},{meas_deg_arr[i]:.6f},"
+                        f"{err_deg_arr[i]:.6f},{u0_deg_s_arr[i]:.6f},"
+                        f"{psi_now_rad_arr[i]:.6f},{psi_cmd_rad_arr[i]:.6f},{qp_infeas_arr[i]}\n")
+        print(f"[LOG] Wrote {RUN_DIR/'scalars.csv'}")
+
+        # 2) full NPZ (keeps horizon arrays intact)
+        np.savez(
+            RUN_DIR / "mpc_rollout_logs.npz",
+            t=t_arr,
+            ref_now_deg=ref_now_deg_arr,
+            meas_deg=meas_deg_arr,
+            err_deg=err_deg_arr,
+            u0_deg_s=u0_deg_s_arr,
+            psi_now_rad=psi_now_rad_arr,
+            psi_cmd_rad=psi_cmd_rad_arr,
+            qp_infeasible=qp_infeas_arr,
+            ref_seq_deg=ref_seq_deg_obj,
+            theta_pred_deg=theta_pred_deg_obj,
+            u_seq_deg_s=u_seq_deg_s_obj,
+            psi_pred_rad=psi_pred_rad_obj,
+        )
+        print(f"[LOG] Wrote {RUN_DIR/'mpc_rollout_logs.npz'}")
+
+        # -------- plots (same style you had) --------
+        plt.figure(figsize=(10, 6))
+        plt.plot(t_arr, ref_now_deg_arr, label="Reference (deg)", linewidth=2)
+        plt.plot(t_arr, meas_deg_arr,    label="Measured (deg)", linewidth=1.5)
+        plt.grid(True, linestyle="--", alpha=0.5)
+        plt.xlabel("Time (s)"); plt.ylabel("Angle (deg)")
+        plt.title("Sine Tracking: Reference vs Measured"); plt.legend(); plt.tight_layout()
+        plt.savefig(RUN_DIR / "plots" / "angles_ref_meas.png", dpi=200); plt.close()
+
+        plt.figure(figsize=(10, 4))
+        plt.plot(t_arr, err_deg_arr, label="Error (deg)")
+        plt.grid(True, linestyle="--", alpha=0.5)
+        plt.xlabel("Time (s)"); plt.ylabel("Error (deg)")
+        plt.title("Tracking Error"); plt.legend(); plt.tight_layout()
+        plt.savefig(RUN_DIR / "plots" / "error.png", dpi=200); plt.close()
+
+        plt.figure(figsize=(10, 4))
+        plt.plot(t_arr, np.rad2deg(psi_now_rad_arr), label="ψ_now (deg)")
+        plt.plot(t_arr, np.rad2deg(psi_cmd_rad_arr), label="ψ_cmd (deg)")
+        plt.grid(True, linestyle="--", alpha=0.5)
+        plt.xlabel("Time (s)"); plt.ylabel("ψ (deg)")
+        plt.title("Joint 6 Command"); plt.legend(); plt.tight_layout()
+        plt.savefig(RUN_DIR / "plots" / "j6.png", dpi=200); plt.close()
+
+        # --- overlay predicted θ rollouts for context ---
+        plt.figure(figsize=(10, 6))
+        plt.plot(t_arr, meas_deg_arr,    color="k", linewidth=1.0, label="θ_meas (deg)")
+        plt.plot(t_arr, ref_now_deg_arr, color="C0", linewidth=1.2, label="θ_ref (deg)")
+        stride = max(1, len(t_arr)//20)  # ~20 rollouts
+        for i in range(0, len(t_arr), stride):
+            tp = theta_pred_deg_log[i]               # (Np,) degrees
+            th = t_arr[i] + (np.arange(1, len(tp)+1) * float(controller.dt))
+            plt.plot(th, tp, alpha=0.30)
+        plt.grid(True, linestyle="--", alpha=0.5)
+        plt.xlabel("Time (s)"); plt.ylabel("Angle (deg)")
+        plt.title("Predicted θ Rollouts (overlaid)"); plt.legend(); plt.tight_layout()
+        plt.savefig(RUN_DIR / "plots" / "theta_rollouts.png", dpi=200); plt.close()
+
+        print(f"[LOG] Plots saved under {RUN_DIR/'plots'}")
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ FREQUENCY = 125  # use 125 if your controller prefers it
 
 # input_double_registers 6..11 hold the joint target q[0..5]
 JOINT_TARGET = [
--0.45088225999941045, -1.9217144451537074, -1.6537089347839355, -1.148652271633484, 1.538681983947754, 0.9267773628234863
+-0.421221081410543, -1.99183716396474, -1.55251479148865, -1.18077780426059, 1.53922581672669, 1.06926810741425
 ]
 JOINT_TARGET2 = [
 -0.4109237829791468, -1.8232914410033167, -1.5675734281539917, -1.3344539117864151, 1.5394864082336426, -3.662370030079977
@@ -96,9 +96,9 @@ def main():
     # proceed with next mode
     watchdog.input_int_register_0 = 3
     con.send(watchdog)
-    print("Mode 3 sent — robot should move to Halt section now.")
-    con.send_pause()
-    con.disconnect()
+    # print("Mode 3 sent — robot should move to Halt section now.")
+    # con.send_pause()
+    # con.disconnect()
 
 
 if __name__ == "__main__":

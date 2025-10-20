@@ -156,7 +156,9 @@ class MPCController:
 
     def set_initial_psi(self, psi0_rad: float):
         self.psi = float(psi0_rad)
-
+    def set_dt(self, new_dt: float):
+        self.dt = float(new_dt)
+        self.S_np = np.tril(np.ones((self.Np, self.Np), float)) * self.dt
     def _tv_gain_sequence(self, B_list):
         """Backward Riccati with time-varying B_k -> K_seq, Qf if needed."""
         P_next = self.Qf if self.Qf is not None else solve_discrete_are(self.A, B_list[-1], self.Q, self.R)
@@ -203,30 +205,16 @@ class MPCController:
         self.Qf = P_dare
         self.V_T, _ = compute_VT_MPI(self.A, B_last, F_state, G_input, K=K_dare)
 
-    def step(self, ref_theta_rad: float, theta_meas_rad: float):
-        """
-        One RT cycle.
-        Inputs:
-          - ref_theta_rad: desired θ at current step (rad)
-          - theta_meas_rad: measured θ (rad) from vision
-        Returns:
-          - j6_cmd_rad: absolute ψ command for joint 6 (clamped & rate-limited)
-          - info: diagnostics dict
-        """
-        # time-varying linearisation around current ψ and warm-start U_prev
+    def step_with_seq(self, ref_seq_rad, theta_meas_rad: float):
+        # --- TV linearisation & gains ---
         psi_k = float(self.psi)
         psi_nom, U_nom, B_list, dpsi_vec = self._build_horizon_linearisation(psi_k)
         self._ensure_terminal_set(B_list[-1])
-
-        # gain sequence and closed-loop Φ_k
         K_seq = self._tv_gain_sequence(B_list)
         Phi_list = [self.A + B_list[k] @ K_seq[k] for k in range(self.Np)]
-
-        # stacked prediction matrices
         Mx, Mc = seq_mat_tv(Phi_list, B_list)
         Kbar = block_diag(*K_seq)
 
-        # costs (same structure as your sim)
         n, m = 1, 1
         Qtil = np.zeros((self.Np*n, self.Np*n))
         if self.Np > 1:
@@ -234,28 +222,34 @@ class MPCController:
         Qtil[(self.Np-1)*n:, (self.Np-1)*n:] = self.Qf
         Rtil = np.kron(np.eye(self.Np), self.R)
 
-        xk = np.array([theta_meas_rad], float)   # use measurement for state
-        X0 = Mx @ xk
-        KC = Kbar @ Mc
-        IUm = np.eye(self.Np*m)
-        U0 = Kbar @ X0
+        # column state
+        xk = np.array([[theta_meas_rad]], dtype=float)         # (1,1)
+        X0 = (Mx @ xk).reshape(self.Np, 1)                     # (Np,1)
 
-        # constant ref horizon (hold-last) — adapt if you have a ref stream
-        xref_seq = np.full((self.Np,), float(ref_theta_rad))
+        KC = Kbar @ Mc                                         # (Np,Np)
+        IUm = np.eye(self.Np*m)
+        U0 = (Kbar @ X0)                                       # (Np,1)
+
+        # --- reference as column ---
+        xref_seq = np.asarray(ref_seq_rad, float).reshape(self.Np, 1)  # (Np,1)
+
+        # --- QP (in c) ---
         H = 2.0 * (Mc.T @ Qtil @ Mc + (KC + IUm).T @ Rtil @ (KC + IUm))
         f = 2.0 * (Mc.T @ Qtil @ (X0 - xref_seq) + (KC + IUm).T @ Rtil @ U0)
-        H = 0.5 * (H + H.T)
+        H = 0.5 * (H + H.T)                                    # symmetrize
 
-        # constraints
+        # --- Constraints ---
         A_osqp = np.empty((0, self.Np*m)); l_osqp = np.empty(0); u_osqp = np.empty(0)
 
         # (A) ψ tube: |ψ_pred - ψ_nom| ≤ dpsi_bound
-        J_u   = Kbar @ Mc + IUm
-        A_tube = self.S_np @ J_u
-        offset = self.S_np @ (U0 - U_nom)
-        dpsi_bound = np.maximum(dpsi_vec, 1e-12)
+        J_u   = Kbar @ Mc + IUm                                 # (Np,Np)
+        A_tube = self.S_np @ J_u                                # (Np,Np)
+        offset = (self.S_np @ (U0 - U_nom.reshape(self.Np,1))).reshape(self.Np)  # (Np,)
+        dpsi_bound = np.maximum(dpsi_vec, 1e-12)                # (Np,)
+
         l_tube = -dpsi_bound - offset
         u_tube = +dpsi_bound - offset
+
         A_osqp = np.vstack([A_osqp, A_tube])
         l_osqp = np.concatenate([l_osqp, l_tube])
         u_osqp = np.concatenate([u_osqp, u_tube])
@@ -264,12 +258,11 @@ class MPCController:
         if np.isfinite(self.band_deg):
             band = np.deg2rad(self.band_deg)
             e_theta = np.array([[1.0]])
-            E   = np.kron(np.eye(self.Np), e_theta)
-            EX0 = E @ X0
-            theta_ref = xref_seq
-            A_th  = E @ Mc
-            rhs_p = theta_ref + band - EX0
-            rhs_n = -theta_ref + band + EX0
+            E   = np.kron(np.eye(self.Np), e_theta)             # (Np,Np)
+            EX0 = (E @ X0).reshape(self.Np, 1)                  # (Np,1)
+            A_th  = E @ Mc                                      # (Np,Np)
+            rhs_p = (xref_seq + band - EX0).reshape(self.Np)    # (Np,)
+            rhs_n = (-xref_seq + band + EX0).reshape(self.Np)   # (Np,)
 
             A_osqp = np.vstack([A_osqp,  A_th,  -A_th])
             l_osqp = np.concatenate([l_osqp, -np.inf*np.ones(self.Np), -np.inf*np.ones(self.Np)])
@@ -277,42 +270,54 @@ class MPCController:
 
         # (C) terminal set
         Sn = np.zeros((1, self.Np*1)); Sn[:, (self.Np-1)*1:self.Np*1] = np.eye(1)
-        A_term = self.V_T @ (Sn @ Mc)
-        u_term = 1.0 - (self.V_T @ (Sn @ X0)).ravel()
+        A_term = self.V_T @ (Sn @ Mc)                                 # (rows, Np)
+        u_term = 1.0 - (self.V_T @ (Sn @ X0)).ravel()                 # (rows,)
+
         A_osqp = np.vstack([A_osqp, A_term])
         l_osqp = np.concatenate([l_osqp, -np.inf*np.ones_like(u_term)])
         u_osqp = np.concatenate([u_osqp,  u_term])
 
-        # solve QP
+        # --- solve ---
         c_opt, y, status = solve_qp_osqp(H, f, A_osqp, l_osqp, u_osqp, U_warm=self.U_prev)
         infeas = (status not in ("solved", "solved inaccurate")) or (c_opt is None)
 
         if infeas:
-            # fallback: hold ψ (u0 = 0)
             u0 = 0.0
-            U_tr = np.zeros(self.Np)
+            U_tr    = np.zeros(self.Np)                           # (Np,)
+            X_pred  = np.full((self.Np, 1), np.nan)               # (Np,1)
+            psi_pred = np.full((self.Np,), np.nan)                # (Np,)
         else:
-            X_pred = X0 + Mc @ c_opt
-            U_pred = Kbar @ X_pred + c_opt
-            U_tr = np.asarray(U_pred).reshape(-1)
-            u0 = float(U_tr[0])
+            c_col  = np.asarray(c_opt, float).reshape(self.Np, 1) # (Np,1)
+            X_pred = (X0 + Mc @ c_col).reshape(self.Np, 1)        # (Np,1)
+            U_pred = (Kbar @ X_pred + c_col).ravel()              # (Np,)
+            U_tr   = U_pred
+            u0     = float(U_tr[0])
+            psi_pred = psi_k + (self.S_np @ U_tr)                 # (Np,)
 
-        # integrate to next ψ command
+        # integrate to next ψ, clamp and rate-limit
         psi_cmd = self.psi + u0 * self.dt
-
-        # actuator safety: clamp and rate limit
         psi_cmd = float(np.clip(psi_cmd, self.j6_min, self.j6_max))
         psi_cmd = float(np.clip(psi_cmd, self.psi - self.rate_limit, self.psi + self.rate_limit))
 
-        # update internals for next cycle
+        # update internals
         self.U_prev = U_tr if not infeas else np.zeros_like(self.U_prev)
         self.psi = psi_cmd
 
         info = dict(
             status=status,
-            u0_rad_s=u0,
-            psi_cmd_rad=psi_cmd,
-            psi_now_rad=psi_k,
             infeasible=int(infeas),
+            # first-move & commands
+            u0_rad_s=u0,
+            psi_now_rad=float(psi_k),
+            psi_cmd_rad=psi_cmd,
+            # rollout (radians)
+            xref_seq_rad=xref_seq.ravel().copy(),        # (Np,)
+            theta_pred_rad=X_pred.ravel().copy(),        # (Np,)
+            u_seq_rad_s=(U_tr.copy() if not infeas else np.full(self.Np, np.nan)),
+            psi_nom_rad=psi_nom.copy(),                  # (Np,)
+            psi_pred_rad=psi_pred.copy(),                # (Np,)
+            dpsi_bound_rad=dpsi_bound.copy(),            # (Np,)
         )
         return psi_cmd, info
+
+

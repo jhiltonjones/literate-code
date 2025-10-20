@@ -72,7 +72,7 @@ if __name__ == "__main__":
     model.load_state_dict(torch.load("simple_mlp.pt", map_location="cpu"))
     model.eval()
 
-    targets = [ 2]  # desired beam angles in degrees
+    targets = np.linspace(-90,90, 10)  # desired beam angles in degrees
     for tgt in targets:
-        j6, ok = solve_joint6_for_angle(model, tgt, j_min=-2.9, j_max=+2.9, x0=-1.8)
+        j6, ok = solve_joint6_for_angle(model, tgt, j_min=-5, j_max=+5, x0=-1.8)
         print(f"target={tgt:6.2f} deg -> joint6 ≈ {j6: .5f} rad  ({'ok' if ok else 'extrapolated'})")
