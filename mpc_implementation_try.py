@@ -139,8 +139,8 @@ controller = MPCController(
     theta_fn=theta_fn,
     J_fn=J_fn,
     dt=0.2,
-    Np=5,                 # you used 5 in the sim main
-    w_th=5.0,
+    Np=1,                 # you used 5 in the sim main
+    w_th=3.0,
     w_u=1.0,
     theta_band_deg=np.inf,    # no band in your sim run (you had error_threshold=np.inf)
     eps_theta_deg=10.0,
@@ -320,9 +320,11 @@ def main():
             angle_deg = last_angle_deg  # reuse last on failure
         theta_meas_rad = np.deg2rad(angle_deg)
         last_angle_deg = angle_deg
-
+        tau_est = dt_ema                                 # <<< NEW (start with 1 cycle)
+        ref_seq = np.array([ref_func(t + tau_est + (i+1)*dt_ema)
+                            for i in range(controller.Np)], float)   # <<< CHANGED
         # 2) build Np-step reference sequence using the same dt used by the controller
-        ref_seq = np.array([ref_func(t + (i+1)*dt_ema) for i in range(controller.Np)], float)
+        # ref_seq = np.array([ref_func(t + (i+1)*dt_ema) for i in range(controller.Np)], float)
 
         # 3) MPC step -> absolute ψ command for joint 6
         j6_cmd_rad, info = controller.step_with_seq(ref_seq, theta_meas_rad)
