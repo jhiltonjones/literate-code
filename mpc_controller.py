@@ -114,7 +114,7 @@ class MPCController:
         *,
         theta_fn,               # callable: θ = theta_fn(ψ)
         J_fn,                   # callable: J = dθ/dψ = J_fn(ψ)
-        dt=0.1,
+        dt=0.0,
         Np=10,
         w_th=10.0,
         w_u=5e-2,
@@ -282,6 +282,7 @@ class MPCController:
         infeas = (status not in ("solved", "solved inaccurate")) or (c_opt is None)
 
         if infeas:
+            print("INSIDE")
             u0 = 0.0
             U_tr    = np.zeros(self.Np)                           # (Np,)
             X_pred  = np.full((self.Np, 1), np.nan)               # (Np,1)

@@ -12,7 +12,7 @@
 import sys
 import time
 import logging
-from new_cam import new_capture
+from new_cam import new_capture, detect_red_points_and_angle
 import rtde.rtde as rtde
 import rtde.rtde_config as rtde_config
 import matplotlib.pyplot as plt
@@ -46,70 +46,70 @@ class AngleUnwrapper:
 
 unwrap_angle = AngleUnwrapper()
 
-def compute_signed_angle(v1, v2):
-    """Returns the signed angle in degrees from v1 to v2 (positive = CCW, negative = CW)"""
-    angle1 = np.arctan2(v1[1], v1[0])
-    angle2 = np.arctan2(v2[1], v2[0])
-    angle_rad = angle2 - angle1
-    angle_deg = np.degrees(angle_rad)
+# def compute_signed_angle(v1, v2):
+#     """Returns the signed angle in degrees from v1 to v2 (positive = CCW, negative = CW)"""
+#     angle1 = np.arctan2(v1[1], v1[0])
+#     angle2 = np.arctan2(v2[1], v2[0])
+#     angle_rad = angle2 - angle1
+#     angle_deg = np.degrees(angle_rad)
 
-    # Normalize to [-180, 180]
-    if angle_deg > 180:
-        angle_deg -= 360
-    elif angle_deg < -180:
-        angle_deg += 360
+#     # Normalize to [-180, 180]
+#     if angle_deg > 180:
+#         angle_deg -= 360
+#     elif angle_deg < -180:
+#         angle_deg += 360
 
-    return angle_deg
+#     return angle_deg
 
-def detect_red_points_and_angle(image_path, show=False):
-    image = cv2.imread(image_path)
-    if image is None:
-        raise FileNotFoundError(f"Could not read image at {image_path}")
+# def detect_red_points_and_angle(image_path, show=False):
+#     image = cv2.imread(image_path)
+#     if image is None:
+#         raise FileNotFoundError(f"Could not read image at {image_path}")
 
-    image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+#     image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-    red_ranges = [
-        (np.array([0, 50, 50]), np.array([10, 255, 255])),
-        (np.array([160, 50, 50]), np.array([180, 255, 255]))
-    ]
+#     red_ranges = [
+#         (np.array([0, 50, 50]), np.array([10, 255, 255])),
+#         (np.array([160, 50, 50]), np.array([180, 255, 255]))
+#     ]
 
-    red_mask = None
-    for lower_red, upper_red in red_ranges:
-        temp_mask = cv2.inRange(image_hsv, lower_red, upper_red)
-        red_mask = temp_mask if red_mask is None else cv2.bitwise_or(red_mask, temp_mask)
+#     red_mask = None
+#     for lower_red, upper_red in red_ranges:
+#         temp_mask = cv2.inRange(image_hsv, lower_red, upper_red)
+#         red_mask = temp_mask if red_mask is None else cv2.bitwise_or(red_mask, temp_mask)
 
-    contours, _ = cv2.findContours(red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if len(contours) < 2:
-        raise ValueError("Less than two red points detected!")
+#     contours, _ = cv2.findContours(red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+#     if len(contours) < 2:
+#         raise ValueError("Less than two red points detected!")
 
-    sorted_contours = sorted(contours, key=cv2.contourArea, reverse=True)[:2]
-    red_centers = []
-    for cnt in sorted_contours:
-        M = cv2.moments(cnt)
-        if M["m00"] != 0:
-            cx = int(M["m10"] / M["m00"])
-            cy = int(M["m01"] / M["m00"])
-            red_centers.append((cx, cy))
-            cv2.circle(image, (cx, cy), 5, (255, 0, 0), -1)
+#     sorted_contours = sorted(contours, key=cv2.contourArea, reverse=True)[:2]
+#     red_centers = []
+#     for cnt in sorted_contours:
+#         M = cv2.moments(cnt)
+#         if M["m00"] != 0:
+#             cx = int(M["m10"] / M["m00"])
+#             cy = int(M["m01"] / M["m00"])
+#             red_centers.append((cx, cy))
+#             cv2.circle(image, (cx, cy), 5, (255, 0, 0), -1)
 
-    # after you get red_centers
-    red_centers.sort(key=lambda p: (p[0], p[1]))  # sort by x then y
-    pt1, pt2 = red_centers  # pt1 = leftmost, pt2 = rightmost
+#     # after you get red_centers
+#     red_centers.sort(key=lambda p: (p[0], p[1]))  # sort by x then y
+#     pt1, pt2 = red_centers  # pt1 = leftmost, pt2 = rightmost
 
-    vector = np.array(pt2) - np.array(pt1)
-    reference = np.array([1.0, 0.0])
-    raw_angle = compute_signed_angle(reference, vector)  # in degrees
-    angle = unwrap_angle(raw_angle)                      # use this instead of raw_angle
+#     vector = np.array(pt2) - np.array(pt1)
+#     reference = np.array([1.0, 0.0])
+#     raw_angle = compute_signed_angle(reference, vector)  # in degrees
+#     angle = unwrap_angle(raw_angle)                      # use this instead of raw_angle
 
 
-    if show:
-        cv2.line(image, pt1, pt2, (0, 255, 0), 2)
-        plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-        plt.title(f"Beam Angle: {angle:.2f}°")
-        plt.axis("off")
-        plt.show()
+#     if show:
+#         cv2.line(image, pt1, pt2, (0, 255, 0), 2)
+#         plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+#         plt.title(f"Beam Angle: {angle:.2f}°")
+#         plt.axis("off")
+#         plt.show()
 
-    return pt1, pt2, angle
+#     return pt1, pt2, angle
 def make_theta_J_from_model(model: torch.nn.Module):
     """Return (theta_fn, J_fn) from a PyTorch model mapping ψ(rad)->θ(deg)."""
     model.eval()
@@ -143,13 +143,13 @@ theta_fn, J_fn = make_theta_J_from_model(model)
 controller = MPCController(
     theta_fn=theta_fn,
     J_fn=J_fn,
-    dt=0.2,
-    Np=1,                 # you used 5 in the sim main
-    w_th=3.0,
-    w_u=1.0,
-    theta_band_deg=np.inf,    # no band in your sim run (you had error_threshold=np.inf)
+    dt=0.0,
+    Np=4,                 
+    w_th=10,
+    w_u=0.01,
+    theta_band_deg=np.inf,    
     eps_theta_deg=10.0,
-    h_deg_for_radius=0.5,
+    h_deg_for_radius=0.1,
     trust_region_deg=180.0,
     theta_max_deg=180.0,
     u_max_deg_s=180.0,
@@ -174,22 +174,13 @@ def list_to_setp(setp, lst, offset=0):
 ROBOT_HOST = "192.168.56.101"
 ROBOT_PORT = 30004
 CONFIG_XML = "control_loop_configuration.xml"
-FREQUENCY = 125  # use 125 if your controller prefers it
+FREQUENCY = 25  # use 125 if your controller prefers it
 
 # input_double_registers 6..11 hold the joint target q[0..5]
 JOINT_TARGET = [
--0.421221081410543, -1.99183716396474, -1.55251479148865, -1.18077780426059, 1.53922581672669, 1.06926810741425]
-JOINT_TARGET2 = [
--0.4109237829791468, -1.8232914410033167, -1.5675734281539917, -1.3344539117864151, 1.5394864082336426, -3.662370030079977
-]
-JOINT_TARGET3 = [
-    -0.4110644499408167,
-    -1.8883592091002406,
-    -1.699528455734253,
-    -1.1374167960933228,
-    1.5391621589660645,
-    -3.4619577566729944,
-]
+-0.4553311506854456, -1.8773862324156703, -1.7150028944015503, -1.1315530997565766, 1.5386338233947754, 0.9049587845802307]
+
+
 def main():
     logging.getLogger().setLevel(logging.INFO)
 
@@ -255,6 +246,14 @@ def main():
     watchdog.input_int_register_0 = 2
     con.send(watchdog)
     state = con.receive()
+    prev_theta_pred0 = None          # θ̂ for k+1 from previous cycle (rad)
+    prev_xref0       = None          # R used for k+1 last cycle (rad)
+    prev_stamp       = None
+    dt_log = []
+    err_raw_deg_log        = []
+    err_aligned_deg_log    = []
+    err_consistency_deg_log= []
+    ref_aligned_deg_log    = []
     t_log = []
     ref_seq_deg_log = []       # list of arrays (len Np) in degrees
     ref_now_deg_log = []       # scalar: first element of ref_seq
@@ -265,13 +264,16 @@ def main():
     psi_now_rad_log = []
     psi_cmd_rad_log = []
     psi_pred_rad_log = []      # list of arrays (len Np)
-    qp_status_log = []         # 0 ok, 1 infeasible
+    qp_status_log = []  
+    pred_kp1_deg_log = []
+    ref_kp1_deg_log  = []
+
     # get current joints & init ψ (joint 6)
     joint_pos = np.array(state.actual_q, dtype=float)  # radians
     controller.set_initial_psi(joint_pos[5])
 
     # --- sine reference in radians, same as sim ---
-    A_deg, bias_deg, freq_hz, phase_deg, duration_s = 15.0, 0.0, 0.02, 0.0, 60.0
+    A_deg, bias_deg, freq_hz, phase_deg, duration_s = 25.0, 0.0, 0.0025, 0.0, 360
     A_rad     = np.deg2rad(A_deg)
     bias_rad  = np.deg2rad(bias_deg)
     phase_rad = np.deg2rad(phase_deg)
@@ -291,8 +293,7 @@ def main():
     t0 = time.time()
     last_tick = time.time()             # fresh timestamp to avoid tiny first dt
 
-    # Optional: smoothing for dt (EMA)
-    alpha_dt = 0.3                      # 0=no smoothing, 1=use last value entirely
+                   
     dt_ema = None
 
     while True:
@@ -307,15 +308,14 @@ def main():
 
         # Clamp dt to sane bounds, e.g. 0.1s..1.5s (tune for your setup)
         dt_k = float(np.clip(dt_k_raw, 0.10, 1.50))
-
-        # Optional: smooth
         if dt_ema is None:
             dt_ema = dt_k
-        else:
-            dt_ema = alpha_dt * dt_k + (1 - alpha_dt) * dt_ema
+        dt_log.append(dt_ema)
 
         controller.set_dt(dt_ema)   # rebuilds S matrix etc.
-
+        dt = float(controller.dt)
+        tau = 0.35  # tune 0.3–0.5 s from data
+        alpha = 1.0 - np.exp(-dt / tau)
         # 1) measure θ (deg) from vision -> radians
         new_capture()
         image_path = "/home/jack/literate-code/focused_image.jpg"
@@ -323,18 +323,90 @@ def main():
             _, _, angle_deg = detect_red_points_and_angle(image_path)
         except Exception:
             angle_deg = last_angle_deg  # reuse last on failure
-        theta_meas_rad = np.deg2rad(angle_deg)
-        last_angle_deg = angle_deg
-        tau_est = dt_ema                                 # <<< NEW (start with 1 cycle)
-        ref_seq = np.array([ref_func(t + tau_est + (i+1)*dt_ema)
-                            for i in range(controller.Np)], float)   # <<< CHANGED
-        # 2) build Np-step reference sequence using the same dt used by the controller
-        # ref_seq = np.array([ref_func(t + (i+1)*dt_ema) for i in range(controller.Np)], float)
+        else:
+            last_angle_deg = angle_deg
+        if prev_theta_pred0 is not None:
+            meas_vs_pred_next_deg = angle_deg - np.degrees(prev_theta_pred0)
+            err_consistency_deg = meas_vs_pred_next_deg
+        else:
+            err_consistency_deg = np.nan
 
-        # 3) MPC step -> absolute ψ command for joint 6
-        j6_cmd_rad, info = controller.step_with_seq(ref_seq, theta_meas_rad)
+        if prev_xref0 is not None:
+            ref_aligned_deg = float(np.rad2deg(prev_xref0))
+            err_aligned_deg = ref_aligned_deg - angle_deg
+        else:
+            ref_aligned_deg = np.nan
+            err_aligned_deg = np.nan           
+        # after capture & detection at time t (just before printing standard log)
+        if prev_theta_pred0 is not None:
+            print(f"[consistency] meas(t)={angle_deg:6.2f}°, prev θ̂₊₁={np.degrees(prev_theta_pred0):6.2f}°, "
+                f"Δ={meas_vs_pred_next_deg:+5.2f}°  (Δt≈{t - prev_stamp:.2f}s)")
 
-        # --- pretty rollout table ---
+        tau = dt_ema   
+        ref_seq = np.array([ref_func(t + tau + (i+1)*dt_ema) for i in range(controller.Np)], float)
+        ref_now_deg = float(np.rad2deg(ref_seq[0]))
+        
+        err_raw_deg = ref_now_deg - angle_deg
+
+        # log *all* KPIs here, because they refer to the same measurement time
+        t_log.append(t)
+        ref_now_deg_log.append(ref_now_deg)          # keep raw reference-at-k
+        ref_aligned_deg_log.append(ref_aligned_deg)  # aligned planned ref from last cycle
+        meas_deg_log.append(angle_deg)
+        err_raw_deg_log.append(err_raw_deg)
+        err_aligned_deg_log.append(err_aligned_deg)
+        err_consistency_deg_log.append(err_consistency_deg)
+
+        print(f"Reference is {angle_deg}")
+        # --- MPC step ---
+        if prev_theta_pred0 is not None:
+            j6_cmd_rad, info = controller.step_with_seq(ref_seq, np.deg2rad(angle_deg))
+        pk1 = info.get("theta_pred_rad")
+        rk1 = info.get("xref_seq_rad")
+        if pk1 is not None and len(pk1) > 0 and np.isfinite(pk1[0]):
+            pred_kp1_deg_log.append(float(np.degrees(pk1[0])))
+        else:
+            pred_kp1_deg_log.append(np.nan)
+        if rk1 is not None and len(rk1) > 0:
+            ref_kp1_deg_log.append(float(np.degrees(rk1[0])))
+        else:
+            ref_kp1_deg_log.append(np.nan)
+
+        # Unpack MPC rollout (same as you already do)
+        theta_pred = np.asarray(info["theta_pred_rad"], float)  # (Np,)
+        xref       = np.asarray(info["xref_seq_rad"], float)    # (Np,)
+
+
+        # 2) Aligned tracking error: compare today's measurement to *yesterday’s planned* R (xref₊₁ from last cycle)
+        if prev_xref0 is not None:
+            ref_aligned_deg = float(np.rad2deg(prev_xref0))
+            err_aligned_deg = ref_aligned_deg - angle_deg
+            print(f"[aligned]  ref_prev₊₁={ref_aligned_deg:6.2f}°  meas={angle_deg:6.2f}°  "
+                f"err_aligned={err_aligned_deg:+6.2f}°")
+        else:
+            ref_aligned_deg = np.nan
+            err_aligned_deg = np.nan
+
+        # 3) Prediction consistency (measurement vs last cycle’s θ̂₊₁)
+        if prev_theta_pred0 is not None:
+            err_consistency_deg = angle_deg - float(np.rad2deg(prev_theta_pred0))
+        else:
+            err_consistency_deg = np.nan
+
+        # --- update “previous” holders for next cycle ---
+        prev_theta_pred0 = theta_pred[0]   # θ̂ for next sample (rad)
+        prev_xref0       = xref[0]         # R used for that next sample (rad)
+        prev_stamp       = t
+
+        # --- your existing prints ---
+        print(f"t={t:5.2f}s  dt={dt_ema:.3f}s  ref={ref_now_deg:6.2f}°  meas={angle_deg:6.2f}°  "
+            f"err_raw={err_raw_deg:+6.2f}°  err_aligned={err_aligned_deg:+6.2f}°  "
+            f"j6={j6_cmd_rad:.3f} rad  u0={np.rad2deg(info['u0_rad_s']):6.2f}°/s  [{info['status']}]")
+        psi_now = float(info['psi_now_rad'])
+        u0 = float(info['u0_rad_s'])
+        theta_k = float(theta_fn(psi_now)) 
+        theta_model_next = float(theta_fn(psi_now + u0*dt))
+        theta_hat_k1 = theta_k + alpha*(theta_model_next - theta_k)
         Np = controller.Np
         u_seq      = np.asarray(info["u_seq_rad_s"], float)         # (Np,)
         psi_pred   = np.asarray(info["psi_pred_rad"], float)        # (Np,)
@@ -345,7 +417,6 @@ def main():
         J_auto = float(J_fn(psi_k))
         J_fd = float((theta_fn(psi_k + h) - theta_fn(psi_k - h)) / (2*h))
         print(f"[J] psi={np.degrees(psi_k):.2f}°  J_auto={J_auto:.4e} rad/rad  J_fd={J_fd:.4e} rad/rad")
-
         if np.all(np.isnan(theta_pred)):
             print(f"[Rollout] (infeasible at t={t:.3f}s) — no prediction.")
         else:
@@ -369,7 +440,9 @@ def main():
                     f"{np.degrees(xref[i]):+9.2f} | "
                     f"{np.degrees(err[i]):+12.2f}")
         # One-step nonlinear vs linear check (right after step_with_seq)
-        theta_pred_rad = np.asarray(info["theta_pred_rad"], float)  # (Np,)
+        # theta_pred_rad = np.asarray(info["theta_pred_rad"], float)  # (Np,)
+        theta_pred_rad = np.asarray(info["theta_pred_rad"], float)
+
         if theta_pred_rad.size > 0 and np.isfinite(theta_pred_rad[0]):
             theta_lin_next = np.rad2deg(theta_pred_rad[0])
         else:
@@ -377,7 +450,10 @@ def main():
 
         theta_nl_next = np.rad2deg(theta_fn(info['psi_now_rad'] + info['u0_rad_s'] * dt_ema))
         print(f"    θ_next_nl≈{theta_nl_next:5.2f}° vs θ_next_lin≈{theta_lin_next:5.2f}°")
-
+        th_pred = np.asarray(info["theta_pred_rad"], float)
+        th_pred = th_pred.copy()
+        if th_pred.size > 0:
+            th_pred[0] = theta_hat_k1
 
         # 4) send full 6D target with updated joint 6
         joint_pos[5] = j6_cmd_rad
@@ -392,17 +468,15 @@ def main():
                 break
             time.sleep(0.005)
 
-        # 6) logging
-        ref_now_deg = float(np.rad2deg(ref_seq[0]))
-        err_deg = ref_now_deg - angle_deg
-        print(f"t={t:5.2f}s  dt={dt_ema:.3f}s  ref={ref_now_deg:6.2f}°  meas={angle_deg:6.2f}°  "
-            f"err={err_deg:6.2f}°  j6={joint_pos[5]:.3f} rad  "
-            f"u0={np.rad2deg(info['u0_rad_s']):6.2f}°/s  [{info['status']}]")
+        # new_capture()
+        # image_path = "/home/jack/literate-code/focused_image.jpg"
 
-        # append scalars
-        t_log.append(t)
-        ref_now_deg_log.append(ref_now_deg)
-        meas_deg_log.append(angle_deg)
+        # _, _, angle_deg_jack = detect_red_points_and_angle(image_path)
+
+        # error_jack = ref_now_deg - angle_deg_jack
+
+        # print(f"ERROR = {error_jack}")
+        # print(f"JACK CON={angle_deg_jack:6.2f}°, prev θ̂₊₁={np.degrees(prev_theta_pred0):6.2f}°")
         u0_deg_s_log.append(float(np.rad2deg(info['u0_rad_s'])))
         psi_now_rad_log.append(float(info['psi_now_rad']))
         psi_cmd_rad_log.append(float(info['psi_cmd_rad']))
@@ -427,7 +501,7 @@ def main():
     con.disconnect()
     # -------- pack logs (AFTER the loop) --------
     t_arr            = np.array(t_log, dtype=float)
-    ref_now_deg_arr  = np.array(ref_now_deg_log, dtype=float)
+    ref_now_deg_arr  = np.array(ref_aligned_deg_log, dtype=float)
     meas_deg_arr     = np.array(meas_deg_log, dtype=float)
     u0_deg_s_arr     = np.array(u0_deg_s_log, dtype=float)
     psi_now_rad_arr  = np.array(psi_now_rad_log, dtype=float)
@@ -440,6 +514,18 @@ def main():
     theta_pred_deg_obj  = np.array(theta_pred_deg_log, dtype=object)
     u_seq_deg_s_obj     = np.array(u_seq_deg_s_log, dtype=object)
     psi_pred_rad_obj    = np.array(psi_pred_rad_log, dtype=object)
+    dt_arr            = np.array(dt_log, dtype=float)
+    pred_kp1_deg_arr  = np.array(pred_kp1_deg_log, dtype=float)
+    ref_kp1_deg_arr   = np.array(ref_kp1_deg_log, dtype=float)
+    t_kp1_arr         = t_arr + dt_arr  # timestamps for the k+1 predictions/references
+
+    # consistency error array (already logged per tick)
+    err_consistency_deg_arr = np.array(err_consistency_deg_log, dtype=float)
+
+    # RMSE over entire trajectory (use raw tracking error)
+    rmse_deg = float(np.sqrt(np.nanmean(err_deg_arr**2)))
+    print(f"[METRIC] RMSE over run: {rmse_deg:.3f} deg")
+
     if log == True:
         # -------- save files --------
         # 1) scalars CSV
@@ -506,6 +592,38 @@ def main():
         plt.xlabel("Time (s)"); plt.ylabel("Angle (deg)")
         plt.title("Predicted θ Rollouts (overlaid)"); plt.legend(); plt.tight_layout()
         plt.savefig(RUN_DIR / "plots" / "theta_rollouts.png", dpi=200); plt.close()
+        plt.figure(figsize=(10, 4))
+        plt.plot(t_arr, err_consistency_deg_arr, label="meas - θ̂₊₁ (deg)")
+        plt.axhline(0.0, linestyle="--", linewidth=1)
+        plt.grid(True, linestyle="--", alpha=0.5)
+        plt.xlabel("Time (s)"); plt.ylabel("Δ (deg)")
+        plt.title("Prediction Consistency (meas vs last θ̂₊₁)")
+        plt.legend(); plt.tight_layout()
+        plt.savefig(RUN_DIR / "plots" / "consistency.png", dpi=200); plt.close()
+
+        plt.figure(figsize=(10, 4))
+        plt.plot(t_arr, err_deg_arr, label="Error (deg)")
+        plt.axhline(0.0, linestyle="--", linewidth=1)
+        plt.grid(True, linestyle="--", alpha=0.5)
+        plt.xlabel("Time (s)"); plt.ylabel("Error (deg)")
+        plt.title(f"Tracking Error (RMSE = {rmse_deg:.2f}°)")
+        plt.legend(); plt.tight_layout()
+        plt.savefig(RUN_DIR / "plots" / "error_rmse.png", dpi=200); plt.close()
+
+        plt.figure(figsize=(4, 4))
+        plt.bar(["RMSE (deg)"], [rmse_deg])
+        plt.tight_layout()
+        plt.savefig(RUN_DIR / "plots" / "rmse_bar.png", dpi=200); plt.close()
+
+        plt.figure(figsize=(10, 6))
+        plt.plot(t_kp1_arr, ref_kp1_deg_arr, label="R[k+1] (deg)", linewidth=2)
+        plt.plot(t_kp1_arr, pred_kp1_deg_arr, label="θ̂[k+1] (deg)", linewidth=1.5)
+        plt.grid(True, linestyle="--", alpha=0.5)
+        plt.xlabel("Time (s)"); plt.ylabel("Angle (deg)")
+        plt.title("MPC k+1 Prediction vs k+1 Reference")
+        plt.legend(); plt.tight_layout()
+        plt.savefig(RUN_DIR / "plots" / "k1_pred_vs_ref.png", dpi=200); plt.close()
+
 
         print(f"[LOG] Plots saved under {RUN_DIR/'plots'}")
 
