@@ -146,7 +146,7 @@ class MPCController:
 
         # 1-state canonical A, B are recomputed per step (B uses J(ψ)*dt)
         self.A = np.array([[1.0]])
-        self.U_prev = np.zeros(self.Np)  # warm start
+        # self.U_prev = np.zeros(self.Np)  # warm start
         self.Qf = None               # terminal weight (set per step from DARE with B_N-1)
         self.V_T = None              # terminal set 
 
@@ -175,7 +175,7 @@ class MPCController:
 
     def _build_horizon_linearisation(self, psi_now):
         # shift + hold-last nominal plan
-        U_nom = np.r_[self.U_prev[1:], self.U_prev[-1]] if self.U_prev.size else np.zeros(self.Np)
+        U_nom = np.zeros(self.Np)
         psi_nom = psi_now + self.S_np @ U_nom
 
         # TV B_list (1x1 each) and per-step trust dpsi bound
@@ -298,9 +298,11 @@ class MPCController:
         # print(f"K value is {Kbar}")        # (Np,1)
 
         # integrate to next ψ, clamp and rate-limit
-        psi_cmd = self.psi + u0 * self.dt
-        psi_cmd = float(np.clip(psi_cmd, self.j6_min, self.j6_max))
-        psi_cmd = float(np.clip(psi_cmd, self.psi - self.rate_limit, self.psi + self.rate_limit))
+        # psi_cmd = self.psi + u0 * self.dt
+        psi_cmd = self.psi + u0*self.dt
+
+        # psi_cmd = float(np.clip(psi_cmd, self.j6_min, self.j6_max))
+        # psi_cmd = float(np.clip(psi_cmd, self.psi - self.rate_limit, self.psi + self.rate_limit))
 
         # update internals
         self.U_prev = U_tr if not infeas else np.zeros_like(self.U_prev)

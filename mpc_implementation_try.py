@@ -31,7 +31,7 @@ from mpc_controller import MPCController
 
 # nn_theta_jacobian.py
 import torch, numpy as np
-log=True
+log=False
 class AngleUnwrapper:
     def __init__(self): self.prev = None
     def __call__(self, a):
@@ -178,7 +178,7 @@ FREQUENCY = 25  # use 125 if your controller prefers it
 
 # input_double_registers 6..11 hold the joint target q[0..5]
 JOINT_TARGET = [
--0.4553311506854456, -1.8773862324156703, -1.7150028944015503, -1.1315530997565766, 1.5386338233947754, 0.9049587845802307]
+-0.405909363423483,-1.95348991970205,-1.60823321342468,-1.16398115575824,1.53934609889984,0.620576620101929]
 
 
 def main():
@@ -273,7 +273,7 @@ def main():
     controller.set_initial_psi(joint_pos[5])
 
     # --- sine reference in radians, same as sim ---
-    A_deg, bias_deg, freq_hz, phase_deg, duration_s = 25.0, 0.0, 0.0025, 0.0, 360
+    A_deg, bias_deg, freq_hz, phase_deg, duration_s = 25.0, 0.0, 0.0025, 0.0, 15
     A_rad     = np.deg2rad(A_deg)
     bias_rad  = np.deg2rad(bias_deg)
     phase_rad = np.deg2rad(phase_deg)
@@ -299,6 +299,7 @@ def main():
     while True:
         now = time.time()
         t = now - t0
+
         if t > duration_s:
             break
 
@@ -342,8 +343,8 @@ def main():
             print(f"[consistency] meas(t)={angle_deg:6.2f}°, prev θ̂₊₁={np.degrees(prev_theta_pred0):6.2f}°, "
                 f"Δ={meas_vs_pred_next_deg:+5.2f}°  (Δt≈{t - prev_stamp:.2f}s)")
 
-        tau = dt_ema   
-        ref_seq = np.array([ref_func(t + tau + (i+1)*dt_ema) for i in range(controller.Np)], float)
+        tau = 1 
+        ref_seq = np.array([ref_func(t + (i+1)*tau) for i in range(controller.Np)], float)
         ref_now_deg = float(np.rad2deg(ref_seq[0]))
         
         err_raw_deg = ref_now_deg - angle_deg
@@ -359,10 +360,10 @@ def main():
 
         print(f"Reference is {angle_deg}")
         # --- MPC step ---
-        if prev_theta_pred0 is not None:
-            j6_cmd_rad, info = controller.step_with_seq(ref_seq, np.deg2rad(angle_deg))
+        j6_cmd_rad, info = controller.step_with_seq(ref_seq, np.deg2rad(angle_deg))
         pk1 = info.get("theta_pred_rad")
         rk1 = info.get("xref_seq_rad")
+        
         if pk1 is not None and len(pk1) > 0 and np.isfinite(pk1[0]):
             pred_kp1_deg_log.append(float(np.degrees(pk1[0])))
         else:
@@ -372,7 +373,6 @@ def main():
         else:
             ref_kp1_deg_log.append(np.nan)
 
-        # Unpack MPC rollout (same as you already do)
         theta_pred = np.asarray(info["theta_pred_rad"], float)  # (Np,)
         xref       = np.asarray(info["xref_seq_rad"], float)    # (Np,)
 
@@ -428,17 +428,17 @@ def main():
             header = (f"\n[Rollout] t={t:.3f}s  ψ_k={np.degrees(psi_k):+.2f}°  "
                     f"dt={dt_ema:.3f}s  max|Δψ|={np.max(np.abs(np.degrees(dpsi_cum))):.2f}°  "
                     f"max|θ̂−R|={np.max(np.abs(np.degrees(err))):.2f}°")
-            print(header)
-            print(" i |   u_i [deg/s] |  Δψ_i(step) [deg] |  Δψ_i(cum) [deg] |  ψ̂_i [deg] |  θ̂_i [deg] |  R_i [deg] | θ̂_i−R_i [deg]")
-            for i in range(Np):
-                print(f"{i+1:2d} | "
-                    f"{np.degrees(u_seq[i]):+12.2f} | "
-                    f"{np.degrees(dpsi_step[i]):+16.2f} | "
-                    f"{np.degrees(dpsi_cum[i]):+15.2f} | "
-                    f"{np.degrees(psi_pred[i]):+10.2f} | "
-                    f"{np.degrees(theta_pred[i]):+10.2f} | "
-                    f"{np.degrees(xref[i]):+9.2f} | "
-                    f"{np.degrees(err[i]):+12.2f}")
+            # print(header)
+            # print(" i |   u_i [deg/s] |  Δψ_i(step) [deg] |  Δψ_i(cum) [deg] |  ψ̂_i [deg] |  θ̂_i [deg] |  R_i [deg] | θ̂_i−R_i [deg]")
+            # for i in range(Np):
+            #     print(f"{i+1:2d} | "
+            #         f"{np.degrees(u_seq[i]):+12.2f} | "
+            #         f"{np.degrees(dpsi_step[i]):+16.2f} | "
+            #         f"{np.degrees(dpsi_cum[i]):+15.2f} | "
+            #         f"{np.degrees(psi_pred[i]):+10.2f} | "
+            #         f"{np.degrees(theta_pred[i]):+10.2f} | "
+            #         f"{np.degrees(xref[i]):+9.2f} | "
+            #         f"{np.degrees(err[i]):+12.2f}")
         # One-step nonlinear vs linear check (right after step_with_seq)
         # theta_pred_rad = np.asarray(info["theta_pred_rad"], float)  # (Np,)
         theta_pred_rad = np.asarray(info["theta_pred_rad"], float)
@@ -449,11 +449,14 @@ def main():
             theta_lin_next = np.nan
 
         theta_nl_next = np.rad2deg(theta_fn(info['psi_now_rad'] + info['u0_rad_s'] * dt_ema))
+        print(f"PSI NOW {info['psi_now_rad']}")
+        print(f"U NOW {info['u0_rad_s']}")
+        
         print(f"    θ_next_nl≈{theta_nl_next:5.2f}° vs θ_next_lin≈{theta_lin_next:5.2f}°")
         th_pred = np.asarray(info["theta_pred_rad"], float)
-        th_pred = th_pred.copy()
-        if th_pred.size > 0:
-            th_pred[0] = theta_hat_k1
+        # th_pred = th_pred.copy()
+        # if th_pred.size > 0:
+        #     th_pred[0] = theta_hat_k1
 
         # 4) send full 6D target with updated joint 6
         joint_pos[5] = j6_cmd_rad

@@ -29,17 +29,17 @@ def new_capture(filename='focused_image.jpg', focus=255):
     if not cap.isOpened():
         raise RuntimeError("Cannot open camera")
 
-    # Try disabling autofocus (not all cameras support this)
-    if cap.set(cv2.CAP_PROP_AUTOFOCUS, 0):
-        print("Autofocus disabled.")
-    else:
-        print("Warning: Could not disable autofocus (unsupported).")
+    # # Try disabling autofocus (not all cameras support this)
+    # if cap.set(cv2.CAP_PROP_AUTOFOCUS, 0):
+    #     print("Autofocus disabled.")
+    # else:
+    #     print("Warning: Could not disable autofocus (unsupported).")
 
-    # Try setting manual focus (value typically from 0 to 255)
-    if cap.set(cv2.CAP_PROP_FOCUS, float(focus)):
-        print(f"Focus set to {focus}.")
-    else:
-        print("Warning: Could not set focus manually (unsupported).")
+    # # Try setting manual focus (value typically from 0 to 255)
+    # if cap.set(cv2.CAP_PROP_FOCUS, float(focus)):
+    #     print(f"Focus set to {focus}.")
+    # else:
+    #     print("Warning: Could not set focus manually (unsupported).")
 
     # Optional: Disable auto exposure and auto white balance for consistent lighting
     cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # Manual mode on many webcams
@@ -58,7 +58,7 @@ def new_capture(filename='focused_image.jpg', focus=255):
 
     if ret and frame is not None:
         cv2.imwrite(filename, frame)
-        print(f"Focused image captured and saved as {filename}")
+        # print(f"Focused image captured and saved as {filename}")
         return filename
     else:
         raise RuntimeError("Failed to capture image")
@@ -92,7 +92,7 @@ def compute_signed_angle(v1, v2):
 
     return angle_deg
 
-def detect_red_points_and_angle(image_path, show=True):
+def detect_red_points_and_angle(image_path, show=False):
     image = cv2.imread(image_path)
     if image is None:
         raise FileNotFoundError(f"Could not read image at {image_path}")
@@ -144,4 +144,4 @@ def detect_red_points_and_angle(image_path, show=True):
 if __name__ == "__main__":
     new_capture()
     image_path = "/home/jack/literate-code/focused_image.jpg"
-    pt1, pt2, angle = detect_red_points_and_angle(image_path)
+    pt1, pt2, angle = detect_red_points_and_angle(image_path, show=True)
