@@ -10,6 +10,7 @@ import numpy as np
 from pathlib import Path
 from datetime import datetime
 import csv, shutil
+from vessel_trajecotry_plot import make_ref_tortuous
 RUN_ROOT = Path("PID_control")
 RUN_DIR = RUN_ROOT / datetime.now().strftime("%Y%m%d_%H%M%S")
 RUN_DIR.mkdir(parents=True, exist_ok=True)
@@ -88,19 +89,9 @@ FREQUENCY = 25  # use 125 if your controller prefers it
 
 # input_double_registers 6..11 hold the joint target q[0..5]
 JOINT_TARGET = [
--0.45087892213930303, -1.9217030010619105, -1.6536900997161865, -1.1486326617053528, 1.5386854410171509, -1.8397100607501429
+-0.41963416734804326, -1.9172355137267054, -1.659855604171753, -1.1482085150531312, 1.539107322692871, 0.932235360145569
 ]
-JOINT_TARGET2 = [
--0.4109237829791468, -1.8232914410033167, -1.5675734281539917, -1.3344539117864151, 1.5394864082336426, -3.662370030079977
-]
-JOINT_TARGET3 = [
-    -0.4110644499408167,
-    -1.8883592091002406,
-    -1.699528455734253,
-    -1.1374167960933228,
-    1.5391621589660645,
-    -3.4619577566729944,
-]
+
 def main():
     logging.getLogger().setLevel(logging.INFO)
 
@@ -171,28 +162,27 @@ def main():
 
     # --- PID tracking of a sine reference (all radians internally) ---
     # ref(t) = bias + A * sin(2π f t + φ)
-    A_deg      = 15.0         # sine amplitude (deg)
-    bias_deg   = 0.0         # bias/offset (deg)
-    freq_hz    = 0.02        # sine frequency (Hz) -> period ~12.5 s
-    phase_deg  = 0.0          # initial phase (deg)
-    duration_s = 60.0         # run time (s)
-
+    # A_deg      = 15.0         # sine amplitude (deg)
+    # bias_deg   = 0.0         # bias/offset (deg)
+    # freq_hz    = 0.02        # sine frequency (Hz) -> period ~12.5 s
+    # phase_deg  = 0.0          # initial phase (deg)
+    # duration_s = 60.0         # run time (s)
+    A_deg, bias_deg, freq_hz, phase_deg, duration_s = 10.0, 35.0, 3.5, 0.0, .5
     A_rad     = np.deg2rad(A_deg)
     bias_rad  = np.deg2rad(bias_deg)
     phase_rad = np.deg2rad(phase_deg)
 
     # PID gains (operate in radians)
     # PID gains (operate in radians)
-    Kp, Ki, Kd = 0.5, 0.00, 0.08  # start with Ki=0; add later if needed
+    Kp, Ki, Kd = 0.8, 0.01, 0.01 # start with Ki=0; add later if needed
 
-    dt = 1.0 / FREQUENCY
-
-    Kp, Ki, Kd = 0.5, 0.0, 0.05      # slightly softer D
-    MAX_STEP = np.deg2rad(10)       # <= 0.5° change per 40ms cycle (tune up to 1–2° if stable)
+    # dt = 1.0 / FREQUENCY
+    dt = 0.005
+    MAX_STEP = np.inf      # <= 0.5° change per 40ms cycle (tune up to 1–2° if stable)
     ALPHA = 0.7                     # meas low-pass (0=no filter, 1=heavy filter)
 
     joint_pos = JOINT_TARGET.copy()
-    SIGN = 1.0
+    SIGN = -1.0
     J6_MIN = JOINT_TARGET[5] - np.pi/2
     J6_MAX = JOINT_TARGET[5] + np.pi/2
 
@@ -201,12 +191,15 @@ def main():
     prev_err_rad = None
     meas_filt = None
     next_tick = time.perf_counter()
+    ref = make_ref_tortuous(A_rad=0.5, f_slow=2.4, f_fast=6.5, offset_rad=0.0, phase_rad=0.0)
 
-    while True:
-        t = time.time() - t0
-        if t > duration_s:
-            break
-
+    # while True:
+    #     t = time.time() - t0
+    #     if t > duration_s:
+    #         break
+    N = int(round(duration_s/dt))
+    for k in range(N):
+        t = k*dt
         # 1) measure angle
         new_capture()
         image_path = "/home/jack/literate-code/focused_image.jpg"
@@ -217,12 +210,15 @@ def main():
         meas_filt = angle_rad if meas_filt is None else (1-ALPHA)*meas_filt + ALPHA*angle_rad
 
         # 2) reference
-        ref_rad = bias_rad + A_rad * np.sin(2.0 * np.pi * freq_hz * t + phase_rad)
+        # ref_rad = bias_rad + A_rad * np.sin(2.0 * np.pi * freq_hz * t + phase_rad)
+        theta_ref, theta_refdot = ref(t)   # tuple: (angle, angular rate)
 
+        # === this replaces your old line ===
+        ref_rad = theta_ref
         # 3) PID
         err_rad = ref_rad - meas_filt
         err_i  += err_rad * dt
-        err_i = np.clip(err_i, np.deg2rad(-30), np.deg2rad(30))  # anti-windup
+        # err_i = np.clip(err_i, np.deg2rad(-90), np.deg2rad(90))  # anti-windup
         derr   = 0.0 if prev_err_rad is None else (err_rad - prev_err_rad) / dt
         u_rad  = Kp * err_rad + Ki * err_i + Kd * derr
         prev_err_rad = err_rad
@@ -299,6 +295,35 @@ def main():
     plt.show()
     print(f"[LOG] Plots saved under {RUN_DIR/'plots'}")
 
+    # ---------- Metrics ----------
+    ref = np.asarray(ref_deg_log, dtype=float)
+    meas = np.asarray(meas_deg_log, dtype=float)
+
+    # Optional: ignore any NaNs that might slip in
+    mask = np.isfinite(ref) & np.isfinite(meas)
+    ref = ref[mask]
+    meas = meas[mask]
+
+    # MSE in degrees^2
+    err_deg = ref - meas
+    mse_deg2 = np.mean(err_deg**2)
+    rmse_deg = np.sqrt(mse_deg2)
+    mae_deg = np.mean(np.abs(err_deg))
+
+    # Same in radians if you want
+    ref_rad = np.deg2rad(ref)
+    meas_rad = np.deg2rad(meas)
+    err_rad = ref_rad - meas_rad
+    mse_rad2 = np.mean(err_rad**2)
+    rmse_rad = np.sqrt(mse_rad2)
+
+    print(f"MSE = {mse_deg2:.4f} deg^2   (RMSE = {rmse_deg:.4f} deg,  MAE = {mae_deg:.4f} deg)")
+    print(f"MSE = {mse_rad2:.6f} rad^2   (RMSE = {rmse_rad:.6f} rad)")
+
+    # Save to file
+    with open(RUN_DIR / "metrics.txt", "w") as f:
+        f.write(f"MSE_deg2: {mse_deg2}\nRMSE_deg: {rmse_deg}\nMAE_deg: {mae_deg}\n")
+        f.write(f"MSE_rad2: {mse_rad2}\nRMSE_rad: {rmse_rad}\n")
 
 if __name__ == "__main__":
     main()

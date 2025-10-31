@@ -19,6 +19,7 @@ import csv, shutil
 import torch
 from neural_net import SimpleMLP
 from nn_test import solve_joint6_for_angle
+from vessel_trajecotry_plot import make_ref_tortuous
 
 class AngleUnwrapper:
     def __init__(self): self.prev = None
@@ -57,8 +58,8 @@ def detect_red_points_and_angle(image_path, show=False):
     image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
     red_ranges = [
-        (np.array([0, 50, 50]), np.array([10, 255, 255])),
-        (np.array([160, 50, 50]), np.array([180, 255, 255]))
+        (np.array([0,   120, 120]), np.array([8,   255, 240])),  # lower red band
+        (np.array([172, 120, 120]), np.array([180, 255, 240]))   # upper red band
     ]
 
     red_mask = None
@@ -112,26 +113,21 @@ def list_to_setp(setp, lst, offset=0):
 ROBOT_HOST = "192.168.56.101"
 ROBOT_PORT = 30004
 CONFIG_XML = "control_loop_configuration.xml"
-FREQUENCY = 125  # use 125 if your controller prefers it
+FREQUENCY = 25  # use 125 if your controller prefers it
 
 # input_double_registers 6..11 hold the joint target q[0..5]
-# JOINT_TARGET = [
-# -0.45088225999941045, -1.9217144451537074, -1.6537089347839355, -1.148652271633484, 1.538681983947754, 0.9267773628234863
-# ]
 JOINT_TARGET = [
--0.421221081410543, -1.99183716396474, -1.55251479148865, -1.18077780426059, 1.53922581672669, 1.06926810741425
+-0.41963416734804326, -1.9172355137267054, -1.659855604171753, -1.1482085150531312, 1.539107322692871, 0.932235360145569
 ]
-JOINT_TARGET2 = [
--0.4109237829791468, -1.8232914410033167, -1.5675734281539917, -1.3344539117864151, 1.5394864082336426, -3.662370030079977
-]
-JOINT_TARGET3 = [
-    -0.4110644499408167,
-    -1.8883592091002406,
-    -1.699528455734253,
-    -1.1374167960933228,
-    1.5391621589660645,
-    -3.4619577566729944,
-]
+# JOINT_TARGET = [
+# -0.41963416734804326, -1.9172355137267054, -1.659855604171753, -1.1482085150531312, 1.539107322692871, 0.8993573188781738]
+
+# JOINT_TARGET = [
+# -0.41963416734804326, -1.9172355137267054, -1.659855604171753, -1.1482085150531312, 1.539107322692871, -0.254600826893942
+# ]
+
+
+
 def main():
     logging.getLogger().setLevel(logging.INFO)
 
@@ -207,12 +203,14 @@ def main():
     err_deg_log, j6_rad_log = [], []
 
     # sine ref params
-    A_deg, bias_deg, freq_hz, phase_deg, duration_s = 15.0, 0.0, 0.02, 0.0, 60.0
+    # A_deg, bias_deg, freq_hz, phase_deg, duration_s = 15.0, 0.0, 0.02, 0.0, 60.0
+    A_deg, bias_deg, freq_hz, phase_deg, duration_s = 15.0, 45.0, 2.5, 0.0, .5
+
     A_rad     = np.deg2rad(A_deg)
     bias_rad  = np.deg2rad(bias_deg)
     phase_rad = np.deg2rad(phase_deg)
-    dt = 0.1
-
+    # dt = 0.1
+    dt=0.005
     # joint 6 limits (rad)
     # J6_MIN = JOINT_TARGET[5] - np.pi/2
     # J6_MAX = JOINT_TARGET[5] + np.pi/2
@@ -220,27 +218,33 @@ def main():
     joint_pos = JOINT_TARGET.copy()
 
     t0 = time.time()
-    while True:
-        t = time.time() - t0
-        if t > duration_s:
-            break
+    # while True:
+    #     t = time.time() - t0
+    #     if t > duration_s:
+    #         break
+    ref = make_ref_tortuous(A_rad=0.5, f_slow=2.4, f_fast=6.5, offset_rad=0.0, phase_rad=0.0)
 
+    N = int(round(duration_s/dt))
+    for k in range(N):
+        t = k*dt
         # 1) measure current angle
-        new_capture()
-        image_path = "/home/jack/literate-code/focused_image.jpg"
-        _, _, angle_deg = detect_red_points_and_angle(image_path)
+
 
         # 2) reference (both rad & deg, solver needs deg)
-        ref_rad = bias_rad + A_rad * np.sin(2.0 * np.pi * freq_hz * t + phase_rad)
-        ref_deg = float(np.rad2deg(ref_rad))
+        # ref_rad = bias_rad + A_rad * np.sin(2.0 * np.pi * freq_hz * t + phase_rad)
+        # ref_deg = float(np.rad2deg(ref_rad))
+        theta_ref, theta_refdot = ref(t)   # tuple: (angle, angular rate)
 
+        # === this replaces your old line ===
+        ref_rad = theta_ref
         # 3) error (for logging only)
-        err_deg = ref_deg - angle_deg
+        ref_deg = float(np.rad2deg(ref_rad))
 
         # 4) invert forward model: angle(deg) -> joint6(rad)
         j6_sol, ok = solve_joint6_for_angle(
             model, target_deg=ref_deg, j_min=-2.9, j_max=+2.9, x0=joint_pos[5]
         )
+
         # clamp to your safe window
         # j6_cmd = float(np.clip(j6_sol, J6_MIN, J6_MAX))
 
@@ -260,7 +264,10 @@ def main():
             if not state.output_bit_registers0_to_31:
                 break
             time.sleep(0.005)
-
+        new_capture()
+        image_path = "/home/jack/literate-code/focused_image.jpg"
+        _, _, angle_deg = detect_red_points_and_angle(image_path)
+        err_deg = ref_deg - angle_deg
         # 7) log
         print(f"t={t:5.2f}s  ref={ref_deg:6.2f}°  meas={angle_deg:6.2f}°  "
             f"err={err_deg:6.2f}°  j6={joint_pos[5]:.3f} rad  [{'ok' if ok else 'extr'}]")
@@ -309,7 +316,35 @@ def main():
 
     plt.show()
     print(f"[LOG] Plots saved under {RUN_DIR/'plots'}")
+    # ---------- Metrics ----------
+    ref = np.asarray(ref_deg_log, dtype=float)
+    meas = np.asarray(meas_deg_log, dtype=float)
 
+    # Optional: ignore any NaNs that might slip in
+    mask = np.isfinite(ref) & np.isfinite(meas)
+    ref = ref[mask]
+    meas = meas[mask]
+
+    # MSE in degrees^2
+    err_deg = ref - meas
+    mse_deg2 = np.mean(err_deg**2)
+    rmse_deg = np.sqrt(mse_deg2)
+    mae_deg = np.mean(np.abs(err_deg))
+
+    # Same in radians if you want
+    ref_rad = np.deg2rad(ref)
+    meas_rad = np.deg2rad(meas)
+    err_rad = ref_rad - meas_rad
+    mse_rad2 = np.mean(err_rad**2)
+    rmse_rad = np.sqrt(mse_rad2)
+
+    print(f"MSE = {mse_deg2:.4f} deg^2   (RMSE = {rmse_deg:.4f} deg,  MAE = {mae_deg:.4f} deg)")
+    print(f"MSE = {mse_rad2:.6f} rad^2   (RMSE = {rmse_rad:.6f} rad)")
+
+    # Save to file
+    with open(RUN_DIR / "metrics.txt", "w") as f:
+        f.write(f"MSE_deg2: {mse_deg2}\nRMSE_deg: {rmse_deg}\nMAE_deg: {mae_deg}\n")
+        f.write(f"MSE_rad2: {mse_rad2}\nRMSE_rad: {rmse_rad}\n")
 
 if __name__ == "__main__":
     main()

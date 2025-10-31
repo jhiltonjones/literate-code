@@ -102,8 +102,8 @@ def main():
             0.3008835929386318, -3.090424554371696, 0.03670261421716901]
 
     # Amplitudes (keep within workspace; increase slowly once verified)
-    AX, AY, AZ = 0.06, 0.05, 0.04       # meters, x/y/z
-    ARX, ARY, ARZ = deg(6), deg(5), deg(4)  # radians, rx/ry/rz
+    AX, AY, AZ = 0.09, 0.07, 0.06       # meters, x/y/z
+    ARX, ARY, ARZ = deg(8), deg(7), deg(5)  # radians, rx/ry/rz
 
     # Incommensurate freqs (complex pattern, smooth motion)
     fx, fy, fz = 0.13, 0.17, 0.11  # Hz

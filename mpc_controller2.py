@@ -1,11 +1,9 @@
-# mpc_controller.py
 import numpy as np
 import scipy.sparse as sp
 import osqp
 from scipy.optimize import linprog
 from scipy.linalg import solve_discrete_are, block_diag
 
-# ---- small utilities (lifted from your sim, minimally tweaked) ----
 
 def dare_stabilizing_K(A, B, Q, R):
     P = solve_discrete_are(A, B, Q, R)
@@ -99,7 +97,6 @@ def compute_VT_MPI(A, B, F, G, K=None, Q=None, R=None, tol=1e-8, nu_max=200):
 
     raise RuntimeError("Reached nu_max without satisfying the MPI condition.")
 
-# ---- main controller ------------------------------------------------
 
 class MPCController:
     """
@@ -144,10 +141,9 @@ class MPCController:
         self.j6_max = float(j6_max_rad)
         self.rate_limit = np.deg2rad(rate_limit_deg)
 
-        # 1-state canonical A, B are recomputed per step (B uses J(ψ)*dt)
         self.A = np.array([[1.0]])
-        # self.U_prev = np.zeros(self.Np)  # warm start
-        self.Qf = None               # terminal weight (set per step from DARE with B_N-1)
+        # self.U_prev = np.zeros(self.Np)  
+        self.Qf = None               # terminal weight 
         self.V_T = None              # terminal set 
 
         # Precompute triangular integration matrix for ψ (S @ U = Δψ horizon)
@@ -168,7 +164,9 @@ class MPCController:
             Kk = -np.linalg.solve(S, Bk.T @ P_next @ self.A)
             K_seq[k] = Kk
             Acl = self.A + Bk @ Kk
-            P_next = self.Q + self.A.T @ P_next @ Acl
+            # P_next = self.Q + self.A.T @ P_next @ Acl
+            P_next = self.Q + Acl.T @ P_next @ Acl + Kk.T @ self.R @ Kk
+
         if self.Qf is None:
             self.Qf = P_next  # last computed P acts like terminal weight
         return K_seq
@@ -221,7 +219,6 @@ class MPCController:
         Qtil[(self.Np-1)*n:, (self.Np-1)*n:] = self.Qf
         Rtil = np.kron(np.eye(self.Np), self.R)
 
-        # column state
         xk = np.array([[theta_meas_rad]], dtype=float)         # (1,1)
         X0 = (Mx @ xk).reshape(self.Np, 1)                     # (Np,1)
 
@@ -229,18 +226,14 @@ class MPCController:
         IUm = np.eye(self.Np*m)
         U0 = (Kbar @ X0)                                       # (Np,1)
 
-        # --- reference as column ---
         xref_seq = np.asarray(ref_seq_rad, float).reshape(self.Np, 1)  # (Np,1)
 
-        # --- QP (in c) ---
         H = 2.0 * (Mc.T @ Qtil @ Mc + (KC + IUm).T @ Rtil @ (KC + IUm))
         f = 2.0 * (Mc.T @ Qtil @ (X0 - xref_seq) + (KC + IUm).T @ Rtil @ U0)
         H = 0.5 * (H + H.T)                                    # symmetrize
 
-        # --- Constraints ---
         A_osqp = np.empty((0, self.Np*m)); l_osqp = np.empty(0); u_osqp = np.empty(0)
 
-        # (A) ψ tube: |ψ_pred - ψ_nom| ≤ dpsi_bound
         J_u   = Kbar @ Mc + IUm                                 # (Np,Np)
         A_tube = self.S_np @ J_u                                # (Np,Np)
         offset = (self.S_np @ (U0 - U_nom.reshape(self.Np,1))).reshape(self.Np)  # (Np,)
@@ -253,7 +246,6 @@ class MPCController:
         l_osqp = np.concatenate([l_osqp, l_tube])
         u_osqp = np.concatenate([u_osqp, u_tube])
 
-        # (B) θ band (optional)
         if np.isfinite(self.band_deg):
             band = np.deg2rad(self.band_deg)
             e_theta = np.array([[1.0]])
@@ -297,25 +289,21 @@ class MPCController:
         
         # print(f"K value is {Kbar}")        # (Np,1)
 
-        # integrate to next ψ, clamp and rate-limit
         # psi_cmd = self.psi + u0 * self.dt
         psi_cmd = self.psi + u0*self.dt
 
         # psi_cmd = float(np.clip(psi_cmd, self.j6_min, self.j6_max))
         # psi_cmd = float(np.clip(psi_cmd, self.psi - self.rate_limit, self.psi + self.rate_limit))
 
-        # update internals
         self.U_prev = U_tr if not infeas else np.zeros_like(self.U_prev)
         self.psi = psi_cmd
 
         info = dict(
             status=status,
             infeasible=int(infeas),
-            # first-move & commands
             u0_rad_s=u0,
             psi_now_rad=float(psi_k),
             psi_cmd_rad=psi_cmd,
-            # rollout (radians)
             xref_seq_rad=xref_seq.ravel().copy(),        # (Np,)
             theta_pred_rad=X_pred.ravel().copy(),        # (Np,)
             u_seq_rad_s=(U_tr.copy() if not infeas else np.full(self.Np, np.nan)),

@@ -26,6 +26,7 @@ from neural_net import SimpleMLP
 from nn_test import solve_joint6_for_angle
 from neural_net import SimpleMLP
 import torch
+from vessel_trajecotry_plot import make_ref_tortuous
 # --- before the loop, build the controller once ---
 from mpc_controller2 import MPCController
 
@@ -111,7 +112,6 @@ unwrap_angle = AngleUnwrapper()
 
 #     return pt1, pt2, angle
 def make_theta_J_from_model(model: torch.nn.Module):
-    """Return (theta_fn, J_fn) from a PyTorch model mapping ψ(rad)->θ(deg)."""
     model.eval()
     try:
         device = next(model.parameters()).device
@@ -128,7 +128,6 @@ def make_theta_J_from_model(model: torch.nn.Module):
         x = torch.tensor([[float(psi_rad)]], dtype=torch.float32, device=device, requires_grad=True)
         y_deg = model(x)                      # θ in degrees
         (dy_dpsi_deg_per_rad,) = torch.autograd.grad(y_deg, x, torch.ones_like(y_deg), retain_graph=False)
-        # Convert deg/rad -> rad/rad:
         return float(dy_dpsi_deg_per_rad.item()) * (np.pi / 180.0)
 
     return theta_fn, J_fn
@@ -144,9 +143,9 @@ controller = MPCController(
     theta_fn=theta_fn,
     J_fn=J_fn,
     dt=0.0,
-    Np=5,                 
-    w_th=20,
-    w_u=0.01,
+    Np=6,                 
+    w_th=350,
+    w_u=0.005,
     theta_band_deg=np.inf,    
     eps_theta_deg=10.0,
     h_deg_for_radius=0.1,
@@ -178,7 +177,11 @@ FREQUENCY = 25  # use 125 if your controller prefers it
 
 # input_double_registers 6..11 hold the joint target q[0..5]
 JOINT_TARGET = [
--0.405909363423483,-1.95348991970205,-1.60823321342468,-1.16398115575824,1.53934609889984,0.620576620101929]
+-0.41963416734804326, -1.9172355137267054, -1.659855604171753, -1.1482085150531312, 1.539107322692871, 0.618075788021088
+
+
+
+]
 
 
 def main():
@@ -273,7 +276,8 @@ def main():
     controller.set_initial_psi(JOINT_TARGET[5])
 
     # --- sine reference in radians, same as sim ---
-    A_deg, bias_deg, freq_hz, phase_deg, duration_s = 20.0, 0.0, 1, 0.0, 1.5
+    A_deg, bias_deg, freq_hz, phase_deg, duration_s = 30.0, 0.0, 1.5, 0.0, .5
+    # A_deg, bias_deg, freq_hz, phase_deg, duration_s = 15.0, 0.0, 0.02, 0.0, 60.0
     A_rad     = np.deg2rad(A_deg)
     bias_rad  = np.deg2rad(bias_deg)
     phase_rad = np.deg2rad(phase_deg)
@@ -282,21 +286,42 @@ def main():
     def ref_func(t):
         return bias_rad + A_rad * np.sin(2.0*np.pi*freq_hz*t + phase_rad)
 
+
+        
     # simple drop-in replacement for RefStream.sequence(...)
     def make_ref_seq(t0, Np, dt):
         # horizon lookahead at t+dt, t+2dt, ..., t+Np*dt  (matches your sim)
         return np.array([ref_func(t0 + (i+1)*dt) for i in range(Np)], dtype=float)
 
     last_angle_deg = 0.0              
-    dt = 0.02
+    dt = 0.005
+    dt_nom = 0.005
+    controller.set_dt(dt_nom)              # build S_np etc. ONCE
+    t_sim = 0.0
     N = int(round(duration_s/dt))
+    ref = make_ref_tortuous(A_rad=0.5, f_slow=2.4, f_fast=6.5, offset_rad=0.2, phase_rad=0.0)
+
+    # for k in range(N):
+    #     t = k*dt
+    #     # ref_seq = np.array([
+    #     #     bias_rad + A_rad*np.sin(2*np.pi*freq_hz*(t_sim + (i+1)*dt_nom) + phase_rad)
+    #     #     for i in range(controller.Np)
+    #     # ], dtype=float)
+    #     ref_seq = np.array([make_ref_tortuous(t_sim + (i+1)*dt_nom) for i in range(controller.Np)], dtype=float)
+    #     dt_log.append(dt)
     for k in range(N):
-        t = k*dt
+        t = k * dt
 
-        dt_log.append(dt)
+        # Horizon times (same logic as before: t_sim + (i+1)*dt_nom)
+        t_hzn = t_sim + dt_nom * np.arange(1, controller.Np + 2)
 
+        # Evaluate reference over the horizon
+        theta_hzn, theta_dot_hzn = ref(t_hzn)   # each is shape (Np,)
+
+        # If your controller expects angle-only sequence (like before):
+        # ref_seq = np.array(theta_hzn, dtype=float)
+        ref_seq = np.array(theta_hzn[1:], dtype=float)
         controller.set_dt(dt)   # rebuilds S matrix etc.
-        dt = float(controller.dt)
 
         new_capture()
         image_path = "/home/jack/literate-code/focused_image.jpg"
@@ -319,8 +344,7 @@ def main():
         if prev_theta_pred0 is not None:
             print(f"[consistency] meas(t)={angle_deg:6.2f}°, prev θ̂₊₁={np.degrees(prev_theta_pred0):6.2f}°, "
                 f"Δ={meas_vs_pred_next_deg:+5.2f}°  (Δt≈{t - prev_stamp:.2f}s)")
-
-        ref_seq = np.array([ref_func(t + (i+1)*dt) for i in range(controller.Np)], float)
+        t_sim += dt_nom
         ref_now_deg = float(np.rad2deg(ref_seq[0]))
         
         err_raw_deg = ref_now_deg - angle_deg
@@ -360,18 +384,15 @@ def main():
             ref_aligned_deg = np.nan
             err_aligned_deg = np.nan
 
-        # 3) Prediction consistency (measurement vs last cycle’s θ̂₊₁)
         if prev_theta_pred0 is not None:
             err_consistency_deg = angle_deg - float(np.rad2deg(prev_theta_pred0))
         else:
             err_consistency_deg = np.nan
 
-        # --- update “previous” holders for next cycle ---
-        prev_theta_pred0 = theta_pred[0]   # θ̂ for next sample (rad)
-        prev_xref0       = xref[0]         # R used for that next sample (rad)
+        prev_theta_pred0 = theta_pred[0]  
+        prev_xref0       = xref[0]         
         prev_stamp       = t
 
-        # --- your existing prints ---
         print(f"t={t:5.2f}s  dt={dt:.3f}s  ref={ref_now_deg:6.2f}°  meas={angle_deg:6.2f}°  "
             f"err_raw={err_raw_deg:+6.2f}°  err_aligned={err_aligned_deg:+6.2f}°  "
             f"j6={j6_cmd_rad:.3f} rad  u0={np.rad2deg(info['u0_rad_s']):6.2f}°/s  [{info['status']}]")
@@ -489,9 +510,8 @@ def main():
     dt_arr            = np.array(dt_log, dtype=float)
     pred_kp1_deg_arr  = np.array(pred_kp1_deg_log, dtype=float)
     ref_kp1_deg_arr   = np.array(ref_kp1_deg_log, dtype=float)
-    t_kp1_arr         = t_arr + dt_arr  # timestamps for the k+1 predictions/references
-
-    # consistency error array (already logged per tick)
+    # t_kp1_arr         = t_arr + dt_arr  # timestamps for the k+1 predictions/references
+    meas_kp1_deg_arr = np.r_[meas_deg_arr[1:], np.nan]    # consistency error array (already logged per tick)
     err_consistency_deg_arr = np.array(err_consistency_deg_log, dtype=float)
 
     # RMSE over entire trajectory (use raw tracking error)
@@ -530,7 +550,7 @@ def main():
         # -------- plots (same style you had) --------
         plt.figure(figsize=(10, 6))
         plt.plot(t_arr, ref_now_deg_arr, label="Reference (deg)", linewidth=2)
-        plt.plot(t_arr, meas_deg_arr,    label="Measured (deg)", linewidth=1.5)
+        plt.plot(t_arr, meas_kp1_deg_arr,    label="Measured (deg)", linewidth=1.5)
         plt.grid(True, linestyle="--", alpha=0.5)
         plt.xlabel("Time (s)"); plt.ylabel("Angle (deg)")
         plt.title("Sine Tracking: Reference vs Measured"); plt.legend(); plt.tight_layout()
@@ -587,14 +607,14 @@ def main():
         plt.tight_layout()
         plt.savefig(RUN_DIR / "plots" / "rmse_bar.png", dpi=200); plt.close()
 
-        plt.figure(figsize=(10, 6))
-        plt.plot(t_kp1_arr, ref_kp1_deg_arr, label="R[k+1] (deg)", linewidth=2)
-        plt.plot(t_kp1_arr, pred_kp1_deg_arr, label="θ̂[k+1] (deg)", linewidth=1.5)
-        plt.grid(True, linestyle="--", alpha=0.5)
-        plt.xlabel("Time (s)"); plt.ylabel("Angle (deg)")
-        plt.title("MPC k+1 Prediction vs k+1 Reference")
-        plt.legend(); plt.tight_layout()
-        plt.savefig(RUN_DIR / "plots" / "k1_pred_vs_ref.png", dpi=200); plt.close()
+        # plt.figure(figsize=(10, 6))
+        # plt.plot(t_kp1_arr, ref_kp1_deg_arr, label="R[k+1] (deg)", linewidth=2)
+        # plt.plot(t_kp1_arr, pred_kp1_deg_arr, label="θ̂[k+1] (deg)", linewidth=1.5)
+        # plt.grid(True, linestyle="--", alpha=0.5)
+        # plt.xlabel("Time (s)"); plt.ylabel("Angle (deg)")
+        # plt.title("MPC k+1 Prediction vs k+1 Reference")
+        # plt.legend(); plt.tight_layout()
+        # plt.savefig(RUN_DIR / "plots" / "k1_pred_vs_ref.png", dpi=200); plt.close()
 
 
         print(f"[LOG] Plots saved under {RUN_DIR/'plots'}")

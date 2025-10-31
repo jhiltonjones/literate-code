@@ -17,19 +17,8 @@ FREQUENCY = 125  # use 125 if your controller prefers it
 
 # input_double_registers 6..11 hold the joint target q[0..5]
 JOINT_TARGET = [
--0.421221081410543, -1.99183716396474, -1.55251479148865, -1.18077780426059, 1.53922581672669, 1.06926810741425
-]
-JOINT_TARGET2 = [
--0.4109237829791468, -1.8232914410033167, -1.5675734281539917, -1.3344539117864151, 1.5394864082336426, -3.662370030079977
-]
-JOINT_TARGET3 = [
-    -0.4110644499408167,
-    -1.8883592091002406,
-    -1.699528455734253,
-    -1.1374167960933228,
-    1.5391621589660645,
-    -3.4619577566729944,
-]
+-0.41963416734804326, -1.9172355137267054, -1.659855604171753, -1.1482085150531312, 1.539107322692871, 0.8993573188781738]
+
 def main():
     logging.getLogger().setLevel(logging.INFO)
 
@@ -77,14 +66,14 @@ def main():
     watchdog.input_int_register_0 = 1
     con.send(watchdog)
     state = con.receive()
-
+    print(f"Target joints are: {state.target_q}")
     list_to_setp(setp, JOINT_TARGET, offset=6)
-
+    list_to_setp(setp, JOINT_TARGET, offset=0)
     con.send(setp)
     time.sleep(0.5)
 
     while True:
-        print(f'Waiting for moveJ()1 to finish start...')
+        # print(f'Waiting for moveJ()1 to finish start...')
         state = con.receive()
         con.send(watchdog)
         if not state.output_bit_registers0_to_31:
@@ -96,9 +85,10 @@ def main():
     # proceed with next mode
     watchdog.input_int_register_0 = 3
     con.send(watchdog)
-    # print("Mode 3 sent — robot should move to Halt section now.")
-    # con.send_pause()
-    # con.disconnect()
+    state = con.receive()
+    print("Joint State:", state.actual_q)
+    print("Mode 3 sent — robot should move to Halt section now.")
+
 
 
 if __name__ == "__main__":
