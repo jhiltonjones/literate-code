@@ -66,9 +66,11 @@ def main():
     watchdog.input_int_register_0 = 1
     con.send(watchdog)
     state = con.receive()
-    print(f"Target joints are: {state.target_q}")
+    
     list_to_setp(setp, JOINT_TARGET, offset=6)
     list_to_setp(setp, JOINT_TARGET, offset=0)
+    con.send(watchdog)
+    print(f"Target joints are: {state.target_q}")
     con.send(setp)
     time.sleep(0.5)
 

@@ -50,9 +50,9 @@ arduino_thread = threading.Thread(target=arduino_worker, daemon=True)
 arduino_thread.start()
 
 if __name__ == '__main__':
-    distance = 20# mm
+    distance = 5# mm
     steps = distance_to_steps(distance)
-    arduino_queue.put((f'REV {steps}', 5))  # queue the command
+    arduino_queue.put((f'REV {steps}', 20))  # queue the command
 
     arduino_queue.join()
     shutdown_arduino()    
