@@ -173,9 +173,14 @@ class MPCController:
 
     def _build_horizon_linearisation(self, psi_now):
         # shift + hold-last nominal plan
-        U_nom = np.zeros(self.Np)
-        psi_nom = psi_now + self.S_np @ U_nom
+        # U_nom = np.zeros(self.Np)
+        # psi_nom = psi_now + self.S_np @ U_nom
 
+        if not hasattr(self, "U_prev"):
+            self.U_prev = np.zeros(self.Np)
+        U_nom = np.roll(self.U_prev, -1)
+        U_nom[-1] = U_nom[-2] if self.Np > 1 else U_nom[-1]
+        psi_nom = psi_now + self.S_np @ U_nom
         # TV B_list (1x1 each) and per-step trust dpsi bound
         B_list = []
         dpsi_vec = np.zeros(self.Np)
