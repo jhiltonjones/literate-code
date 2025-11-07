@@ -1,7 +1,7 @@
 import sys
 import time
 import logging
-from new_cam import new_capture
+from new_cam import new_capture, detect_red_points_and_angle
 import rtde.rtde as rtde
 import rtde.rtde_config as rtde_config
 import matplotlib.pyplot as plt
@@ -15,67 +15,19 @@ RUN_ROOT = Path("PID_control")
 RUN_DIR = RUN_ROOT / datetime.now().strftime("%Y%m%d_%H%M%S")
 RUN_DIR.mkdir(parents=True, exist_ok=True)
 print(f"[LOG] Saving outputs to: {RUN_DIR}")
+from pathlib import Path
+import time
 
-def compute_signed_angle(v1, v2):
-    """Returns the signed angle in degrees from v1 to v2 (positive = CCW, negative = CW)"""
-    angle1 = np.arctan2(v1[1], v1[0])
-    angle2 = np.arctan2(v2[1], v2[0])
-    angle_rad = angle2 - angle1
-    angle_deg = np.degrees(angle_rad)
+BASE_DIR = Path("runs_pid")   
+BASE_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Normalize to [-180, 180]
-    if angle_deg > 180:
-        angle_deg -= 360
-    elif angle_deg < -180:
-        angle_deg += 360
+def make_run_dir():
+    # timestamp-based to avoid clashes
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    run_dir = BASE_DIR / f"run_{stamp}"
+    (run_dir / "plots").mkdir(parents=True, exist_ok=True)
+    return run_dir
 
-    return angle_deg
-
-def detect_red_points_and_angle(image_path, show=False):
-    image = cv2.imread(image_path)
-    if image is None:
-        raise FileNotFoundError(f"Could not read image at {image_path}")
-
-    image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
-    red_ranges = [
-        (np.array([0, 50, 50]), np.array([10, 255, 255])),
-        (np.array([160, 50, 50]), np.array([180, 255, 255]))
-    ]
-
-    red_mask = None
-    for lower_red, upper_red in red_ranges:
-        temp_mask = cv2.inRange(image_hsv, lower_red, upper_red)
-        red_mask = temp_mask if red_mask is None else cv2.bitwise_or(red_mask, temp_mask)
-
-    contours, _ = cv2.findContours(red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if len(contours) < 2:
-        raise ValueError("Less than two red points detected!")
-
-    sorted_contours = sorted(contours, key=cv2.contourArea, reverse=True)[:2]
-    red_centers = []
-    for cnt in sorted_contours:
-        M = cv2.moments(cnt)
-        if M["m00"] != 0:
-            cx = int(M["m10"] / M["m00"])
-            cy = int(M["m01"] / M["m00"])
-            red_centers.append((cx, cy))
-            cv2.circle(image, (cx, cy), 5, (255, 0, 0), -1)
-
-    pt1, pt2 = red_centers
-    vector = np.array(pt2) - np.array(pt1)
-    reference = np.array([1, 0])  # x-axis
-
-    angle = compute_signed_angle(reference, vector)
-
-    if show:
-        cv2.line(image, pt1, pt2, (0, 255, 0), 2)
-        plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-        plt.title(f"Beam Angle: {angle:.2f}°")
-        plt.axis("off")
-        plt.show()
-
-    return pt1, pt2, angle
 def list_to_setp(setp, lst, offset=0):
     """ Converts a list into RTDE input registers, allowing different sets with offsets. """
     for i in range(6):
@@ -89,10 +41,14 @@ FREQUENCY = 25  # use 125 if your controller prefers it
 
 # input_double_registers 6..11 hold the joint target q[0..5]
 JOINT_TARGET = [
--0.41963416734804326, -1.9172355137267054, -1.659855604171753, -1.1482085150531312, 1.539107322692871, 0.932235360145569
-]
+-0.39337331453432256, -1.989443918267721, -1.5559700727462769, -1.1809083384326478, 1.539546012878418, 1.6148388385772705]
+
+
 
 def main():
+    global RUN_DIR
+    RUN_DIR = make_run_dir()
+    print(f"[RUN] Logging to {RUN_DIR}")
     logging.getLogger().setLevel(logging.INFO)
 
     # Load RTDE recipes
@@ -167,7 +123,7 @@ def main():
     # freq_hz    = 0.02        # sine frequency (Hz) -> period ~12.5 s
     # phase_deg  = 0.0          # initial phase (deg)
     # duration_s = 60.0         # run time (s)
-    A_deg, bias_deg, freq_hz, phase_deg, duration_s = 10.0, 35.0, 3.5, 0.0, .5
+    A_deg, bias_deg, freq_hz, phase_deg, duration_s = 20.0, 0.0, 2.5, 0.0, .5
     A_rad     = np.deg2rad(A_deg)
     bias_rad  = np.deg2rad(bias_deg)
     phase_rad = np.deg2rad(phase_deg)
@@ -210,11 +166,11 @@ def main():
         meas_filt = angle_rad if meas_filt is None else (1-ALPHA)*meas_filt + ALPHA*angle_rad
 
         # 2) reference
-        # ref_rad = bias_rad + A_rad * np.sin(2.0 * np.pi * freq_hz * t + phase_rad)
-        theta_ref, theta_refdot = ref(t)   # tuple: (angle, angular rate)
+        ref_rad = bias_rad + A_rad * np.sin(2.0 * np.pi * freq_hz * t + phase_rad)
+        # theta_ref, theta_refdot = ref(t)   # tuple: (angle, angular rate)
 
         # === this replaces your old line ===
-        ref_rad = theta_ref
+        # ref_rad = theta_ref
         # 3) PID
         err_rad = ref_rad - meas_filt
         err_i  += err_rad * dt
@@ -253,7 +209,6 @@ def main():
         j6_rad_log.append(joint_pos[5])
 
 
-    # proceed with next mode
     watchdog.input_int_register_0 = 3
     con.send(watchdog)
     print("Mode 3 sent — robot should move to Halt section now.")
@@ -261,7 +216,6 @@ def main():
     con.send_pause()
     con.disconnect()
 
-    # Save figures
     ( RUN_DIR / "plots" ).mkdir(exist_ok=True)
     plt.figure(figsize=(10, 6))
     plt.plot(t_log, ref_deg_log, label="Reference (deg)", linewidth=2)
@@ -324,6 +278,86 @@ def main():
     with open(RUN_DIR / "metrics.txt", "w") as f:
         f.write(f"MSE_deg2: {mse_deg2}\nRMSE_deg: {rmse_deg}\nMAE_deg: {mae_deg}\n")
         f.write(f"MSE_rad2: {mse_rad2}\nRMSE_rad: {rmse_rad}\n")
+    # -------- SAVE & COMPARE (no lead/lag) --------
+    (RUN_DIR / "plots").mkdir(exist_ok=True)
 
+    t_arr       = np.asarray(t_log, dtype=float)
+    ref_now_deg = np.asarray(ref_deg_log, dtype=float)
+    meas_deg    = np.asarray(meas_deg_log, dtype=float)
+
+    # Raw synchronous error (NO shift)
+    err_raw_deg = ref_now_deg - meas_deg
+
+    # Metrics (deg)
+    mse_deg2  = float(np.mean(err_raw_deg**2))
+    rmse_deg  = float(np.sqrt(mse_deg2))
+    mae_deg   = float(np.mean(np.abs(err_raw_deg)))
+
+    # Also in radians (optional)
+    ref_rad = np.deg2rad(ref_now_deg)
+    meas_rad = np.deg2rad(meas_deg)
+    err_rad  = ref_rad - meas_rad
+    mse_rad2 = float(np.mean(err_rad**2))
+    rmse_rad = float(np.sqrt(mse_rad2))
+
+    print(f"[METRIC] RMSE (deg): {rmse_deg:.3f} | MAE (deg): {mae_deg:.3f}")
+
+    # --- Plots: Reference vs Measured (no lag) ---
+    plt.figure(figsize=(10, 6))
+    plt.plot(t_arr, ref_now_deg, label="Reference (deg)", linewidth=2)
+    plt.plot(t_arr, meas_deg,    label="Measured (deg)",  linewidth=1.5)
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.xlabel("Time (s)"); plt.ylabel("Angle (deg)")
+    plt.title("Reference vs Measured (synchronous)")
+    plt.legend(); plt.tight_layout()
+    plt.savefig(RUN_DIR / "plots" / "angles_ref_meas_sync.png", dpi=200); plt.close()
+
+    # --- Error plot (no lag) ---
+    plt.figure(figsize=(10, 4))
+    plt.plot(t_arr, err_raw_deg, label="Error = Ref − Meas (deg)")
+    plt.axhline(0.0, linestyle="--", linewidth=1)
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.xlabel("Time (s)"); plt.ylabel("Error (deg)")
+    plt.title(f"Tracking Error (RMSE = {rmse_deg:.2f}°)")
+    plt.legend(); plt.tight_layout()
+    plt.savefig(RUN_DIR / "plots" / "error_raw.png", dpi=200); plt.close()
+
+    # --- Save scalars CSV for quick comparison ---
+    with open(RUN_DIR / "scalars.csv", "w") as f:
+        f.write("t,ref_now_deg,meas_deg,err_raw_deg\n")
+        for i in range(len(t_arr)):
+            f.write(f"{t_arr[i]:.6f},{ref_now_deg[i]:.6f},{meas_deg[i]:.6f},{err_raw_deg[i]:.6f}\n")
+    print(f"[LOG] Wrote {RUN_DIR/'scalars.csv'}")
+
+    # --- Save metrics CSV (RMSE etc.) ---
+    with open(RUN_DIR / "metrics.csv", "w") as f:
+        f.write("metric,value\n")
+        f.write(f"RMSE_deg,{rmse_deg:.6f}\n")
+        f.write(f"MAE_deg,{mae_deg:.6f}\n")
+        f.write(f"MSE_deg2,{mse_deg2:.6f}\n")
+        f.write(f"RMSE_rad,{rmse_rad:.8f}\n")
+        f.write(f"MSE_rad2,{mse_rad2:.8f}\n")
+    print(f"[LOG] Wrote {RUN_DIR/'metrics.csv'}")
+
+    # --- NPZ for aggregator compatibility (no lead/lag) ---
+    # Keep the key names your MPC aggregator expects; set aligned == raw (no shifting).
+    np.savez(
+        RUN_DIR / "pid_rollout_logs.npz",
+        t=t_arr,
+        ref_now_deg=ref_now_deg,
+        meas_deg=meas_deg,
+        err_raw_deg=err_raw_deg,
+        err_aligned_deg=err_raw_deg,   # <- same as raw; still NO lag
+        # Optional placeholders for parity (safe to ignore downstream)
+        u0_deg_s=np.asarray(u_deg_log, dtype=float),
+        psi_now_rad=np.full_like(t_arr, np.nan, dtype=float),
+        psi_cmd_rad=np.full_like(t_arr, np.nan, dtype=float),
+        qp_infeasible=np.zeros_like(t_arr, dtype=int),
+        ref_seq_deg=np.array([], dtype=object),
+        theta_pred_deg=np.array([], dtype=object),
+        u_seq_deg_s=np.array([], dtype=object),
+        psi_pred_rad=np.array([], dtype=object),
+    )
+    print(f"[LOG] Wrote {RUN_DIR/'pid_rollout_logs.npz'}")
 if __name__ == "__main__":
     main()

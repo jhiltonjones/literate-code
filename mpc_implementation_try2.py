@@ -23,12 +23,10 @@ from datetime import datetime
 import csv, shutil
 import torch
 from neural_net import SimpleMLP
-from nn_test import solve_joint6_for_angle
-from neural_net import SimpleMLP
 import torch
 from vessel_trajecotry_plot import make_ref_tortuous
 # --- before the loop, build the controller once ---
-from mpc_controller2 import MPCController
+from mpc_controller_ltv import MPCController
 
 # nn_theta_jacobian.py
 import torch, numpy as np
@@ -144,11 +142,11 @@ controller = MPCController(
     J_fn=J_fn,
     dt=0.0,
     Np=6,                 
-    w_th=350,
+    w_th=250,
     w_u=0.005,
     theta_band_deg=np.inf,    
-    eps_theta_deg=10.0,
-    h_deg_for_radius=0.1,
+    eps_theta_deg=5.0,
+    h_deg_for_radius=0.01,
     trust_region_deg=180.0,
     theta_max_deg=np.inf,
     u_max_deg_s=np.inf,
@@ -177,11 +175,8 @@ FREQUENCY = 25  # use 125 if your controller prefers it
 
 # input_double_registers 6..11 hold the joint target q[0..5]
 JOINT_TARGET = [
--0.41963416734804326, -1.9172355137267054, -1.659855604171753, -1.1482085150531312, 1.539107322692871, 0.618075788021088
+-0.39337331453432256, -1.989443918267721, -1.5559700727462769, -1.1809083384326478, 1.539546012878418, 1.6148388385772705]
 
-
-
-]
 
 
 def main():
@@ -276,7 +271,7 @@ def main():
     controller.set_initial_psi(JOINT_TARGET[5])
 
     # --- sine reference in radians, same as sim ---
-    A_deg, bias_deg, freq_hz, phase_deg, duration_s = 30.0, 0.0, 1.5, 0.0, .5
+    A_deg, bias_deg, freq_hz, phase_deg, duration_s = 20.0, 0.0, 2.5, 0.0, .5
     # A_deg, bias_deg, freq_hz, phase_deg, duration_s = 15.0, 0.0, 0.02, 0.0, 60.0
     A_rad     = np.deg2rad(A_deg)
     bias_rad  = np.deg2rad(bias_deg)
@@ -311,16 +306,19 @@ def main():
     #     dt_log.append(dt)
     for k in range(N):
         t = k * dt
+        ref_seq = np.array([
+            bias_rad + A_rad*np.sin(2*np.pi*freq_hz*(t_sim + (i+1)*dt_nom) + phase_rad)
+            for i in range(controller.Np)
+        ], dtype=float)
+        # # Horizon times (same logic as before: t_sim + (i+1)*dt_nom)
+        # t_hzn = t_sim + dt_nom * np.arange(1, controller.Np + 2)
 
-        # Horizon times (same logic as before: t_sim + (i+1)*dt_nom)
-        t_hzn = t_sim + dt_nom * np.arange(1, controller.Np + 2)
+        # # Evaluate reference over the horizon
+        # theta_hzn, theta_dot_hzn = ref(t_hzn)   # each is shape (Np,)
 
-        # Evaluate reference over the horizon
-        theta_hzn, theta_dot_hzn = ref(t_hzn)   # each is shape (Np,)
-
-        # If your controller expects angle-only sequence (like before):
-        # ref_seq = np.array(theta_hzn, dtype=float)
-        ref_seq = np.array(theta_hzn[1:], dtype=float)
+        # # If your controller expects angle-only sequence (like before):
+        # # ref_seq = np.array(theta_hzn, dtype=float)
+        # ref_seq = np.array(theta_hzn[1:], dtype=float)
         controller.set_dt(dt)   # rebuilds S matrix etc.
 
         new_capture()

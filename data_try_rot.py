@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-# from new_cam import detect_red_points_and_angle
+from new_cam import detect_red_points_and_angle
 import rtde.rtde as rtde
 import rtde.rtde_config as rtde_config
 
@@ -17,85 +17,6 @@ import rtde.rtde_config as rtde_config
 from new_cam import new_capture
 IMAGE_PATH = "/home/jack/literate-code/focused_image.jpg"  # adjust if needed
 
-class AngleUnwrapper:
-    def __init__(self): self.prev = None
-    def __call__(self, a):
-        if self.prev is None:
-            self.prev = a
-            return a
-        delta = a - self.prev
-        if   delta > 180.0: a -= 360.0
-        elif delta < -180.0: a += 360.0
-        self.prev = a
-        return a
-
-unwrap_angle = AngleUnwrapper()
-
-def compute_signed_angle(v1, v2):
-    """Returns the signed angle in degrees from v1 to v2 (positive = CCW, negative = CW)"""
-    angle1 = np.arctan2(v1[1], v1[0])
-    angle2 = np.arctan2(v2[1], v2[0])
-    angle_rad = angle2 - angle1
-    angle_deg = np.degrees(angle_rad)
-
-    # Normalize to [-180, 180]
-    if angle_deg > 180:
-        angle_deg -= 360
-    elif angle_deg < -180:
-        angle_deg += 360
-
-    return angle_deg
-
-def detect_red_points_and_angle(image_path, show=False):
-    image = cv2.imread(image_path)
-    if image is None:
-        raise FileNotFoundError(f"Could not read image at {image_path}")
-
-    image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
-    red_ranges = [
-        (np.array([0,   120, 120]), np.array([8,   255, 240])),  # lower red band
-        (np.array([172, 120, 120]), np.array([180, 255, 240]))   # upper red band
-    ]
-
-
-    red_mask = None
-    for lower_red, upper_red in red_ranges:
-        temp_mask = cv2.inRange(image_hsv, lower_red, upper_red)
-        red_mask = temp_mask if red_mask is None else cv2.bitwise_or(red_mask, temp_mask)
-
-    contours, _ = cv2.findContours(red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if len(contours) < 2:
-        raise ValueError("Less than two red points detected!")
-
-    sorted_contours = sorted(contours, key=cv2.contourArea, reverse=True)[:2]
-    red_centers = []
-    for cnt in sorted_contours:
-        M = cv2.moments(cnt)
-        if M["m00"] != 0:
-            cx = int(M["m10"] / M["m00"])
-            cy = int(M["m01"] / M["m00"])
-            red_centers.append((cx, cy))
-            cv2.circle(image, (cx, cy), 5, (255, 0, 0), -1)
-
-    # after you get red_centers
-    red_centers.sort(key=lambda p: (p[0], p[1]))  # sort by x then y
-    pt1, pt2 = red_centers  # pt1 = leftmost, pt2 = rightmost
-
-    vector = np.array(pt2) - np.array(pt1)
-    reference = np.array([1.0, 0.0])
-    raw_angle = compute_signed_angle(reference, vector)  # in degrees
-    angle = unwrap_angle(raw_angle)                      # use this instead of raw_angle
-
-
-    if show:
-        cv2.line(image, pt1, pt2, (0, 255, 0), 2)
-        plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-        plt.title(f"Beam Angle: {angle:.2f}°")
-        plt.axis("off")
-        plt.show()
-
-    return pt1, pt2, angle
 
 # --------- Axis-angle <-> rotation helpers (for composing yaw) ----------
 def axis_angle_to_rot(rx, ry, rz):
@@ -138,7 +59,7 @@ FREQUENCY = 25  # Hz streaming
 # -0.5121501127826136, -2.1110855541624964, -1.3705785274505615, -1.2402780813029786, 1.5382890701293945, -0.06735116640199834
 # ]
 JOINT_TARGET = [
--0.41963416734804326, -1.9172355137267054, -1.659855604171753, -1.1482085150531312, 1.539107322692871, 0.8993573188781738]
+-0.39337331453432256, -1.989443918267721, -1.5559700727462769, -1.1809083384326478, 1.539546012878418, 1.6148388385772705]
 GRID_STEP = 0.0    # meters
 GRID_NX   = 1
 GRID_NY   = 1
@@ -149,7 +70,7 @@ T_HOLD    = 0.5    # seconds per pose (reduce to fit more data)
 # TCP0 = [0.7444982728931748, -0.5284124861014445, 0.39884576718636294, 0.3881354040517943, -3.0881379446948745, 0.034401442335245426] perpendicular
 # TCP0 = [0.7477774659086398, -0.6007309595177756, 0.39883841647415963, 1.305924149254298, -2.8194402999111485, 0.01905514958953238]
 # TCP0 = [0.7613563761169214, -0.6323676512264372, 0.3988764263237069, 1.657680313149333, -2.6266170486132676, 0.012076413305251487]
-TCP0 = [0.6997275944298121, -0.5067652389781642, 0.398820021566092, 0.3916972734892568, -3.087544212500262, 0.03433012223510048]
+TCP0 = [0.7573552061757611, -0.506778797150568, 0.3987371972414318, -0.6765979864161791, -3.0469228618765967, 0.04772737453020368]
 
 # --- Simple 2D rotations to test (yaw about world Z, degrees) ---
 YAW_MIN_DEG = -90
@@ -160,7 +81,7 @@ Y_CENTER_SHIFT = 0.0 # meters; +0.02 shifts the grid 2 cm in +X
 
 
 # Output file
-RESULTS_XLSX = "grid_results2.xlsx"
+RESULTS_XLSX = "grid_results_friday.xlsx"
 
 def write_joint_target(setp, q, offset=6):
     for i in range(6):

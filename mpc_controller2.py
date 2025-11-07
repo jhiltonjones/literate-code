@@ -20,9 +20,9 @@ def trust_radius(jac_fn, psi_rad, *,
     Jm = float(jac_fn(psi_rad - h_rad))
     Jprime = (Jp - Jm) / (2.0*h_rad)
     dpsi_lin  = eps_theta_rad / max(abs(J0),    Jmin)
-    dpsi_quad = (2.0*eps_theta_rad / max(abs(Jprime), Lmin))**0.5
-    dpsi = min(dpsi_lin, dpsi_quad, dpsi_cap)
-    return dpsi
+    # dpsi_quad = (2.0*eps_theta_rad / max(abs(Jprime), Lmin))**0.5
+    # dpsi = min(dpsi_lin, dpsi_quad, dpsi_cap)
+    return dpsi_lin
 
 def seq_mat_tv(Phi_list, B_list):
     N = len(Phi_list)
@@ -164,7 +164,6 @@ class MPCController:
             Kk = -np.linalg.solve(S, Bk.T @ P_next @ self.A)
             K_seq[k] = Kk
             Acl = self.A + Bk @ Kk
-            # P_next = self.Q + self.A.T @ P_next @ Acl
             P_next = self.Q + Acl.T @ P_next @ Acl + Kk.T @ self.R @ Kk
 
         if self.Qf is None:
@@ -187,7 +186,7 @@ class MPCController:
         for i in range(self.Np):
             Ji = float(self.J_fn(psi_nom[i]))
             # sign-preserving floor to avoid singular B
-            Ji = np.sign(Ji) * max(abs(Ji), 1e-6)
+            # Ji = np.sign(Ji) * max(abs(Ji), 1e-6)
             B_list.append(np.array([[self.dt * Ji]]))
             dpsi_vec[i] = trust_radius(
                 self.J_fn, psi_nom[i],
@@ -208,10 +207,9 @@ class MPCController:
         self.V_T, _ = compute_VT_MPI(self.A, B_last, F_state, G_input, K=K_dare)
 
     def step_with_seq(self, ref_seq_rad, theta_meas_rad: float):
-        # --- TV linearisation & gains ---
         psi_k = float(self.psi)
         psi_nom, U_nom, B_list, dpsi_vec = self._build_horizon_linearisation(psi_k)
-        self._ensure_terminal_set(B_list[-1])
+        # self._ensure_terminal_set(B_list[-1])
         K_seq = self._tv_gain_sequence(B_list)
         Phi_list = [self.A + B_list[k] @ K_seq[k] for k in range(self.Np)]
         Mx, Mc = seq_mat_tv(Phi_list, B_list)

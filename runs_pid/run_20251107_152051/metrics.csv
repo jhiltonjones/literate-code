@@ -1,0 +1,6 @@
+metric,value
+RMSE_deg,3.276881
+MAE_deg,2.961172
+MSE_deg2,10.737950
+RMSE_rad,0.05719236
+MSE_rad2,0.00327097

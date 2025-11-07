@@ -1,0 +1,11 @@
+run_idx,per_run_rmse_deg
+0,1.555708
+1,1.550325
+2,1.547955
+
+metric,deg
+mean_per_run_rmse,1.551329
+std_per_run_rmse,0.003244
+median_per_run_rmse,1.550325
+p90_per_run_rmse,1.554631
+rmse_of_mean_curve,1.543806
