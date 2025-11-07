@@ -3,7 +3,7 @@ from scipy.linalg import solve_discrete_are, block_diag
 from mpc_controller_functions import solve_qp_osqp, trust_radius, seq_mat_lti, dare_stabilising_K
 class MPC_controller_time_invariant:
     def __init__(self, *, J_fn, dt = 0.0, Np = 10, w_th = 10.0, w_u = 5e-2, theta_band_deg=10.0, eps_theta_deg = 10.0, h_deg_for_radius = 0.5,
-                 trust_region_deg = 180, theta_max_deg = 90, u_max_deg_s = 90, rate_limit_deg = 15.0):
+                 trust_region_deg = 180, theta_max_deg = 90, u_max_deg_s = 90, rate_limit_deg = 15.0, use_stabilization=True):
         self.J_fn = J_fn
         self.dt = float(dt)
         self.Np = int(Np)
@@ -20,7 +20,7 @@ class MPC_controller_time_invariant:
         self.Qf = None
         self.V_T = None
         self.S_np = np.tril(np.ones((self.Np, self.Np)))*self.dt #This is a ZOH which assumes that the input u will be held constant over its interval
-
+        self.use_stabilization = bool(use_stabilization)
     def set_intial_psi(self, psi0_rad):
         self.psi = float(psi0_rad)
         
@@ -30,16 +30,21 @@ class MPC_controller_time_invariant:
 
     def build_lti_model(self, psi_now):
         J0 = float(self.J_fn(psi_now))
-        J0 = np.sign(J0)* max(abs(J0), 1e-6)
-        B = np.array([[self.dt*J0]])
+        J0 = np.sign(J0) * max(abs(J0), 1e-6)
+        B = np.array([[self.dt * J0]])
 
+        # still get terminal P from DARE
         K_lqr, P_lqr = dare_stabilising_K(self.A, B, self.Q, self.R)
         self.Qf = P_lqr
 
-        Phi = self.A + B @K_lqr
+        if not self.use_stabilization:
+            K_lqr = np.zeros_like(K_lqr)   
+            Phi   = self.A                
+        else:
+            Phi   = self.A + B @ K_lqr
 
         Mx, Mc = seq_mat_lti(Phi, B, self.Np)
-        Kbar = block_diag(*([K_lqr]* self.Np))
+        Kbar   = block_diag(*([K_lqr] * self.Np)) 
         return B, K_lqr, Phi, Mx, Mc, Kbar
     def step_with_seq(self, ref_seq_rad, theta_meas_rad):
         use_tube = False

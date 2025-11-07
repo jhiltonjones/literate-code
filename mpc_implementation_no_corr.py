@@ -99,7 +99,7 @@ FREQUENCY = 25  # use 125 if your controller prefers it
 
 # input_double_registers 6..11 hold the joint target q[0..5]
 JOINT_TARGET = [
--0.39337331453432256, -1.989443918267721, -1.5559700727462769, -1.1809083384326478, 1.539546012878418, 1.6148388385772705]
+-0.3828681151019495, -2.021482606927389, -1.508305549621582, -1.1969867509654541, 1.539742350578308, 2.3771610260009766]
 
 
 
@@ -198,7 +198,7 @@ def main():
     controller.set_intial_psi(JOINT_TARGET[5])
 
     # --- sine reference in radians, same as sim ---
-    A_deg, bias_deg, freq_hz, phase_deg, duration_s = 20.0, 0.0, 4.5, 0.0, .5
+    A_deg, bias_deg, freq_hz, phase_deg, duration_s = 20.0, 0.0, 2.5, 0.0, .5
 
     # A_deg, bias_deg, freq_hz, phase_deg, duration_s = 15.0, 0.0, 0.02, 0.0, 60.0
     A_rad     = np.deg2rad(A_deg)

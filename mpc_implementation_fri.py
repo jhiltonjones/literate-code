@@ -25,7 +25,7 @@ import torch
 from neural_net import SimpleMLP
 import torch
 from vessel_trajecotry_plot import make_ref_tortuous
-from mpc_controller_ltv import MPC_controller_time_varying
+from mpc_controller_lti import MPC_controller_time_invariant
 import torch, numpy as np
 log=True
 
@@ -55,7 +55,7 @@ model.load_state_dict(torch.load("simple_mlp.pt", map_location="cpu"))
 model.eval()
 
 theta_fn, J_fn = make_theta_J_from_model(model)
-controller = MPC_controller_time_varying(
+controller = MPC_controller_time_invariant(
     J_fn=J_fn,
     dt=0.0,
     Np=6,                 
@@ -67,7 +67,8 @@ controller = MPC_controller_time_varying(
     trust_region_deg=180.0,
     theta_max_deg=np.inf,
     u_max_deg_s=np.inf,
-    rate_limit_deg=np.inf
+    rate_limit_deg=np.inf,
+    use_stabilization=False
 )
 
 
@@ -101,7 +102,7 @@ FREQUENCY = 25  # use 125 if your controller prefers it
 
 # input_double_registers 6..11 hold the joint target q[0..5]
 JOINT_TARGET = [
--0.39337331453432256, -1.989443918267721, -1.5559700727462769, -1.1809083384326478, 1.539546012878418, 1.6148388385772705]
+-0.3828681151019495, -2.021482606927389, -1.508305549621582, -1.1969867509654541, 1.539742350578308, 2.3771610260009766]
 
 
 
@@ -200,7 +201,7 @@ def main():
     controller.set_intial_psi(JOINT_TARGET[5])
 
     # --- sine reference in radians, same as sim ---
-    A_deg, bias_deg, freq_hz, phase_deg, duration_s = 20.0, 0.0, 4.5, 0.0, .5
+    A_deg, bias_deg, freq_hz, phase_deg, duration_s = 20.0, 0.0, 2.5, 0.0, .05
     # A_deg, bias_deg, freq_hz, phase_deg, duration_s = 15.0, 0.0, 0.02, 0.0, 60.0
     A_rad     = np.deg2rad(A_deg)
     bias_rad  = np.deg2rad(bias_deg)
