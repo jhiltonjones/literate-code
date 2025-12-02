@@ -1,24 +1,3 @@
-# import cv2
-
-# def new_capture(filename='focused_image.jpg', focus=255):
-#     cap = cv2.VideoCapture(0)
-#     if not cap.isOpened():
-#         raise RuntimeError("Cannot open camera")
-
-#     cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
-#     cap.set(cv2.CAP_PROP_FOCUS, focus)
-
-#     ret, frame = cap.read()
-#     cap.release()
-
-#     if ret:
-#         cv2.imwrite(filename, frame)
-#         print(f"Focused image captured and saved as {filename}")
-#         return filename
-#     else:
-#         raise RuntimeError("Failed to capture image")
-# if __name__ == "__main__":
-#     new_capture()
 
 import cv2
 import matplotlib.pyplot as plt
@@ -46,7 +25,7 @@ def new_capture(filename='focused_image.jpg', focus=255):
     cap.set(cv2.CAP_PROP_EXPOSURE, -6)         # May need tuning per device
 
     cap.set(cv2.CAP_PROP_AUTO_WB, 0)
-    cap.set(cv2.CAP_PROP_WB_TEMPERATURE, 4500)
+    cap.set(cv2.CAP_PROP_WB_TEMPERATURE, 1)
 
     # Wait briefly to let camera apply new settings
     for _ in range(5):
@@ -85,10 +64,10 @@ def compute_signed_angle(v1, v2):
     angle_deg = np.degrees(angle_rad)
 
     # Normalize to [-180, 180]
-    if angle_deg > 180:
-        angle_deg -= 360
-    elif angle_deg < -180:
-        angle_deg += 360
+    if angle_deg > 90:
+        angle_deg -= 180
+    elif angle_deg < -90:
+        angle_deg += 180
 
     return angle_deg
 
@@ -99,11 +78,14 @@ def detect_red_points_and_angle(image_path, show=False):
 
     image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
+    # red_ranges = [
+    #     (np.array([0, 50, 50]), np.array([10, 255, 255])),
+    #     (np.array([160, 50, 50]), np.array([180, 255, 255]))
+    # ]
     red_ranges = [
-        (np.array([0, 50, 50]), np.array([10, 255, 255])),
-        (np.array([160, 50, 50]), np.array([180, 255, 255]))
+        (np.array([0,   140, 80]), np.array([10, 255, 255])),
+        (np.array([170, 140, 80]), np.array([180, 255, 255]))
     ]
-
     red_mask = None
     for lower_red, upper_red in red_ranges:
         temp_mask = cv2.inRange(image_hsv, lower_red, upper_red)
@@ -124,11 +106,13 @@ def detect_red_points_and_angle(image_path, show=False):
             cv2.circle(image, (cx, cy), 5, (255, 0, 0), -1)
 
     # after you get red_centers
-    red_centers.sort(key=lambda p: (p[0], p[1]))  # sort by x then y
+    # red_centers.sort(key=lambda p: (p[0], p[1]))  # sort by x then y
+
+    red_centers.sort(key=lambda p: (p[1], p[0]))  # sort by x then y
     pt1, pt2 = red_centers  # pt1 = leftmost, pt2 = rightmost
 
     vector = np.array(pt2) - np.array(pt1)
-    reference = np.array([1.0, 0.0])
+    reference = np.array([0.0, 1.0])
     raw_angle = compute_signed_angle(reference, vector)  # in degrees
     angle = unwrap_angle(raw_angle)                      # use this instead of raw_angle
 

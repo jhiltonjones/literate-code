@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from new_cam import detect_red_points_and_angle
 import rtde.rtde as rtde
 import rtde.rtde_config as rtde_config
-
+from transformations import get_point
 # --------- Camera hook ----------
 from new_cam import new_capture
 IMAGE_PATH = "/home/jack/literate-code/focused_image.jpg"  # adjust if needed
@@ -68,18 +68,18 @@ T_HOLD    = 0.5    # seconds per pose (reduce to fit more data)
 # Base TCP (z & base orientation)
 
 
-TCP0 = [0.8044738038441734, -0.5510007927198923, 0.4330498000582408, -2.29598721437706, 2.137233721135031, 0.02151272219562204]
+TCP0 = [0.7844738038441734, -0.5510007927198923, 0.4330498000582408, -2.29598721437706, 2.137233721135031, 0.02151272219562204]
 
 # --- Simple 2D rotations to test (yaw about world Z, degrees) ---
-YAW_MIN_DEG = -90
-YAW_MAX_DEG =  90
+YAW_MIN_DEG = -80
+YAW_MAX_DEG =  80
 YAW_STEP_DEG = 1
 YAW_DEG_LIST = list(range(YAW_MIN_DEG, YAW_MAX_DEG + 1, YAW_STEP_DEG))
 Y_CENTER_SHIFT = 0.00 # meters; +0.02 shifts the grid 2 cm in +X
 
 
 # Output file
-RESULTS_XLSX = "grid_results_test.xlsx"
+RESULTS_XLSX = "grid_results_phi6.xlsx"
 
 def write_joint_target(setp, q, offset=6):
     for i in range(6):
@@ -145,16 +145,12 @@ def main():
         if hasattr(state, "output_bit_registers0_to_31") and not bit0_is_true(state.output_bit_registers0_to_31):
             break
 
-    # ===== Mode 2: stream XY + yaw (2D) =====
+    # ===== Mode 2: sweep only Z rotation using get_point() =====
     watchdog.input_int_register_0 = 2
     con.send(watchdog)
     DT = 1.0 / FREQUENCY
 
-    # Centered grid
-    cx = (GRID_NX - 1) / 2.0
-    cy = (GRID_NY - 1) / 2.0
-
-    # Prepare output once
+    # Prepare output once (keep same columns so your Excel analysis still works)
     if not os.path.exists(RESULTS_XLSX):
         pd.DataFrame(columns=[
             "grid_ix","grid_iy","dx_m","dy_m","yaw_deg",
@@ -164,109 +160,99 @@ def main():
             "timestamp"
         ]).to_excel(RESULTS_XLSX, index=False)
 
-    # Base orientation matrix from TCP0 axis-angle
-    R0 = axis_angle_to_rot(TCP0[3], TCP0[4], TCP0[5])
-
-    # Simple yaw timing rule
+    # Yaw timing rule (for smooth motion on large jumps)
     YAW_JUMP_THRESHOLD_DEG = 10.0
     BIG_JUMP_TRANSIT_SEC   = 10.0  # slow transition duration for big jumps
 
-    total_cells = GRID_NX * GRID_NY * len(YAW_DEG_LIST)
+    total_steps = len(YAW_DEG_LIST)
     done = 0
-    prev_yaw = 12  # deg
+    prev_yaw = 12  # start with no previous yaw
 
-    for iy in range(GRID_NY):
-        for ix in range(GRID_NX):
-            dx = (ix - cx) * GRID_STEP
-            dy = (iy - cy) * GRID_STEP
+    for yaw_deg in YAW_DEG_LIST:
+        done += 1
+        print(f"\n[{done}/{total_steps}] yaw(z) = {yaw_deg:+.1f}°")
 
-            for yaw_deg in YAW_DEG_LIST:
-                done += 1
+        # -------- smooth large yaw jumps using get_point() ----------
+        if prev_yaw is not None:
+            dyaw = yaw_deg - prev_yaw
+            if abs(dyaw) > YAW_JUMP_THRESHOLD_DEG:
+                steps = max(1, int(BIG_JUMP_TRANSIT_SEC / DT))
+                for k in range(steps + 1):
+                    y_interp = prev_yaw + dyaw * (k / steps)
+                    mid_pose = get_point(0, y_interp)  # x-angle fixed at 0
 
-                # Tool-frame yaw to reduce IK flips: R = R0 @ Rz(yaw)
-                yaw_rad = math.radians(yaw_deg)
-                R = R0 @ Rz(yaw_rad)
-                rx, ry, rz = rot_to_axis_angle(R)
-
-                target = [TCP0[0]  + Y_CENTER_SHIFT+ dx, TCP0[1] + dy, TCP0[2], rx, ry, rz]
-
-                print(f"\n[{done}/{total_cells}] (ix,iy)=({ix},{iy}) dx={dx:+.3f} dy={dy:+.3f} | yaw={yaw_deg:+.1f}°")
-
-                # ------------ slow only big yaw jumps (>10°) over 10 seconds ------------
-                if prev_yaw is not None:
-                    dyaw = yaw_deg - prev_yaw
-                    if abs(dyaw) > YAW_JUMP_THRESHOLD_DEG:
-                        steps = max(1, int(BIG_JUMP_TRANSIT_SEC / DT))
-                        for k in range(steps + 1):
-                            y_interp = prev_yaw + dyaw * (k / steps)
-                            R_mid = R0 @ Rz(math.radians(y_interp))
-                            rmx, rmy, rmz = rot_to_axis_angle(R_mid)
-                            mid_pose = [TCP0[0] + dx, TCP0[1] + dy, TCP0[2], rmx, rmy, rmz]
-                            # stream one tick at this intermediate yaw
-                            for j in range(6):
-                                setattr(setp, f"input_double_register_{j}", float(mid_pose[j]))
-                            if "input_bit_registers0_to_31" in setp.__dict__:
-                                setp.input_bit_registers0_to_31 = 0
-                            con.send(setp)
-                            _ = con.receive(); con.send(watchdog)
-                            time.sleep(DT)
-                # ------------------------------------------------------------------------
-
-                # Dwell at final target pose for T_HOLD
-                t0 = time.perf_counter(); next_tick = t0
-                while (time.perf_counter() - t0) < T_HOLD:
+                    # stream one tick at this intermediate yaw
                     for j in range(6):
-                        setattr(setp, f"input_double_register_{j}", float(target[j]))
+                        setattr(setp, f"input_double_register_{j}", float(mid_pose[j]))
                     if "input_bit_registers0_to_31" in setp.__dict__:
                         setp.input_bit_registers0_to_31 = 0
                     con.send(setp)
-                    state = con.receive(); con.send(watchdog)
-                    next_tick += DT
-                    rem = next_tick - time.perf_counter()
-                    if rem > 0: time.sleep(rem)
+                    _ = con.receive(); con.send(watchdog)
+                    time.sleep(DT)
+        # ------------------------------------------------------------
 
-                # Final state read for logging
-                state = con.receive(); con.send(watchdog)
-                if state is None:
-                    print("Lost connection during logging; exiting.")
-                    break
+        # Final target pose for this yaw, from your kinematics
+        target = get_point(0, yaw_deg)  # theta_x = 0, theta_z = yaw_deg
 
-                joints = list(getattr(state, "actual_q"))
-                tcp    = list(getattr(state, "actual_TCP_pose"))
+        # Dwell at final target pose for T_HOLD
+        t0 = time.perf_counter()
+        next_tick = t0
+        while (time.perf_counter() - t0) < T_HOLD:
+            for j in range(6):
+                setattr(setp, f"input_double_register_{j}", float(target[j]))
+            if "input_bit_registers0_to_31" in setp.__dict__:
+                setp.input_bit_registers0_to_31 = 0
+            con.send(setp)
+            state = con.receive(); con.send(watchdog)
+            next_tick += DT
+            rem = next_tick - time.perf_counter()
+            if rem > 0:
+                time.sleep(rem)
 
-                # Beam capture
-                beam_pt1 = beam_pt2 = (np.nan, np.nan)
-                beam_angle = np.nan
-                try:
-                    new_capture()
-                    pt1, pt2, angle = detect_red_points_and_angle(IMAGE_PATH, show=False)
-                    beam_pt1, beam_pt2, beam_angle = pt1, pt2, float(angle)
-                    print(f"Beam angle: {beam_angle:.2f}°  | pt1={pt1} pt2={pt2}")
-                except Exception as e:
-                    print(f"Beam detection failed (ix={ix}, iy={iy}, yaw={yaw_deg}): {e}")
+        # Final state read for logging
+        state = con.receive(); con.send(watchdog)
+        if state is None:
+            print("Lost connection during logging; exiting.")
+            break
 
-                # Append row
-                row = pd.DataFrame([{
-                    "grid_ix": ix, "grid_iy": iy, "dx_m": dx, "dy_m": dy, "yaw_deg": yaw_deg,
-                    "joint_1": joints[0], "joint_2": joints[1], "joint_3": joints[2],
-                    "joint_4": joints[3], "joint_5": joints[4], "joint_6": joints[5],
-                    "tcp_x": tcp[0], "tcp_y": tcp[1], "tcp_z": tcp[2],
-                    "tcp_rx": tcp[3], "tcp_ry": tcp[4], "tcp_rz": tcp[5],
-                    "beam_pt1_x": beam_pt1[0], "beam_pt1_y": beam_pt1[1],
-                    "beam_pt2_x": beam_pt2[0], "beam_pt2_y": beam_pt2[1],
-                    "beam_angle_deg": beam_angle,
-                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
-                }])
+        joints = list(getattr(state, "actual_q"))
+        tcp    = list(getattr(state, "actual_TCP_pose"))
 
-                try:
-                    existing = pd.read_excel(RESULTS_XLSX)
-                    out = pd.concat([existing, row], ignore_index=True)
-                except Exception:
-                    out = row
-                out.to_excel(RESULTS_XLSX, index=False)
+        # Beam capture (unchanged)
+        beam_pt1 = beam_pt2 = (np.nan, np.nan)
+        beam_angle = np.nan
+        try:
+            new_capture()
+            pt1, pt2, angle = detect_red_points_and_angle(IMAGE_PATH, show=False)
+            beam_pt1, beam_pt2, beam_angle = pt1, pt2, float(angle)
+            print(f"Beam angle: {beam_angle:.2f}°  | pt1={pt1} pt2={pt2}")
+        except Exception as e:
+            print(f"Beam detection failed (yaw={yaw_deg}): {e}")
 
-                # remember last yaw
-                prev_yaw = yaw_deg
+        # Append row to Excel
+        row = pd.DataFrame([{
+            "grid_ix": 0, "grid_iy": 0, "dx_m": 0.0, "dy_m": 0.0,  # no grid now
+            "yaw_deg": yaw_deg,
+            "joint_1": joints[0], "joint_2": joints[1], "joint_3": joints[2],
+            "joint_4": joints[3], "joint_5": joints[4], "joint_6": joints[5],
+            "tcp_x": tcp[0], "tcp_y": tcp[1], "tcp_z": tcp[2],
+            "tcp_rx": tcp[3], "tcp_ry": tcp[4], "tcp_rz": tcp[5],
+            "beam_pt1_x": beam_pt1[0], "beam_pt1_y": beam_pt1[1],
+            "beam_pt2_x": beam_pt2[0], "beam_pt2_y": beam_pt2[1],
+            "beam_angle_deg": beam_angle,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+        }])
+
+        try:
+            existing = pd.read_excel(RESULTS_XLSX)
+            out = pd.concat([existing, row], ignore_index=True)
+        except Exception:
+            out = row
+        out.to_excel(RESULTS_XLSX, index=False)
+
+        # remember last yaw
+        prev_yaw = yaw_deg
+
 
     # ===== Mode 3: halt/exit =====
     watchdog.input_int_register_0 = 3

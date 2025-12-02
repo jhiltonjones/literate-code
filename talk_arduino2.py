@@ -50,7 +50,7 @@ arduino_thread = threading.Thread(target=arduino_worker, daemon=True)
 arduino_thread.start()
 
 if __name__ == '__main__':
-    distance = 5# mm
+    distance = 2# mm
     steps = distance_to_steps(distance)
     arduino_queue.put((f'REV {steps}', 20))  # queue the command
 
